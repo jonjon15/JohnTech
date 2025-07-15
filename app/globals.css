@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+/* Wakanda Theme */
+[data-theme="wakanda"] {
+  --background: 120 15% 8%;
+  --foreground: 120 20% 95%;
+  --card: 120 20% 6%;
+  --card-foreground: 120 20% 95%;
+  --popover: 120 20% 6%;
+  --popover-foreground: 120 20% 95%;
+  --primary: 120 100% 50%;
+  --primary-foreground: 120 15% 8%;
+  --secondary: 120 15% 12%;
+  --secondary-foreground: 120 20% 95%;
+  --muted: 120 15% 12%;
+  --muted-foreground: 120 10% 65%;
+  --accent: 120 100% 50%;
+  --accent-foreground: 120 15% 8%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 120 20% 95%;
+  --border: 120 15% 15%;
+  --input: 120 15% 15%;
+  --ring: 120 100% 50%;
+  --wakanda-pattern: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23047857' fill-opacity='0.1'%3E%3Cpath d='M30 30l15-15v30l-15-15zm-15 0l-15-15v30l15-15z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Wakanda-specific styles */
+[data-theme="wakanda"] .wakanda-bg {
+  background: radial-gradient(circle at 25% 25%, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(16, 185, 129, 0.05) 0%, transparent 50%),
+    linear-gradient(135deg, hsl(120, 15%, 8%) 0%, hsl(120, 20%, 6%) 100%);
+}
+
+[data-theme="wakanda"] .wakanda-pattern {
+  background-image: radial-gradient(circle at 1px 1px, rgba(16, 185, 129, 0.15) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+[data-theme="wakanda"] .wakanda-geometric {
+  background-image: linear-gradient(
+      45deg,
+      transparent 35%,
+      rgba(16, 185, 129, 0.1) 35%,
+      rgba(16, 185, 129, 0.1) 65%,
+      transparent 65%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 35%,
+      rgba(16, 185, 129, 0.05) 35%,
+      rgba(16, 185, 129, 0.05) 65%,
+      transparent 65%
+    );
+  background-size: 30px 30px;
+}
+
+/* Glowing effects for Wakanda theme */
+[data-theme="wakanda"] .wakanda-glow {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.1), inset 0 0 20px
+    rgba(16, 185, 129, 0.05);
+}
+
+[data-theme="wakanda"] .wakanda-border {
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+/* Animation for theme transitions */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Keyframes for floating particles */
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: var(--tw-bg-opacity); /* Use the opacity from the inline style */
+  }
+  80% {
+    opacity: var(--tw-bg-opacity);
+  }
+  100% {
+    transform: translateY(-120vh) rotate(360deg); /* Move further up */
+    opacity: 0;
+  }
+}
