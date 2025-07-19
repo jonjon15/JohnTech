@@ -75,18 +75,19 @@ async function exchangeCodeForToken(code: string) {
     console.log("Trocando código por token...")
     console.log("Redirect URI:", REDIRECT_URI)
 
+    const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
+
     const formData = new URLSearchParams({
       grant_type: "authorization_code",
       code: code,
       redirect_uri: REDIRECT_URI,
-      client_id: BLING_CLIENT_ID,
-      client_secret: BLING_CLIENT_SECRET,
     })
 
     const response = await fetch("https://www.bling.com.br/OAuth2/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${credentials}`,
         Accept: "application/json",
       },
       body: formData,
