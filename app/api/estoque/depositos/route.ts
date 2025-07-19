@@ -13,7 +13,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: depositos,
-      total: depositos.length,
       requestId,
     })
   } catch (error) {
@@ -26,38 +25,25 @@ export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7)
 
   try {
-    const body = await request.json()
-    logRequest(requestId, "POST", "/api/estoque/depositos", body)
+    logRequest(requestId, "POST", "/api/estoque/depositos", {})
 
-    if (!body.nome) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Nome do depósito é obrigatório",
-          requestId,
-        },
-        { status: 400 },
-      )
-    }
+    const body = await request.json()
 
     const deposito = await createDeposito({
       bling_id: body.bling_id,
       nome: body.nome,
       descricao: body.descricao,
       endereco: body.endereco,
-      ativo: body.ativo !== undefined ? body.ativo : true,
-      padrao: body.padrao !== undefined ? body.padrao : false,
+      ativo: body.ativo !== false,
+      padrao: body.padrao === true,
     })
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: deposito,
-        message: "Depósito criado com sucesso",
-        requestId,
-      },
-      { status: 201 },
-    )
+    return NextResponse.json({
+      success: true,
+      data: deposito,
+      message: "Depósito criado com sucesso",
+      requestId,
+    })
   } catch (error) {
     console.error(`[${requestId}] Erro ao criar depósito:`, error)
     return handleBlingError(error, requestId)

@@ -6,25 +6,22 @@ export async function GET(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7)
 
   try {
+    logRequest(requestId, "GET", "/api/estoque", {})
+
     const { searchParams } = new URL(request.url)
-    const produtoNome = searchParams.get("produto")
-    const depositoId = searchParams.get("deposito") ? Number.parseInt(searchParams.get("deposito")!) : undefined
-    const estoqueMinimo = searchParams.get("estoque_minimo") === "true"
-    const estoqueZerado = searchParams.get("estoque_zerado") === "true"
 
-    logRequest(requestId, "GET", "/api/estoque", { produtoNome, depositoId, estoqueMinimo, estoqueZerado })
+    const filters = {
+      produtoNome: searchParams.get("produto") || undefined,
+      depositoId: searchParams.get("deposito") ? Number.parseInt(searchParams.get("deposito")!) : undefined,
+      estoqueMinimo: searchParams.get("estoque_minimo") === "true",
+      estoqueZerado: searchParams.get("estoque_zerado") === "true",
+    }
 
-    const estoque = await getAllEstoque({
-      produtoNome: produtoNome || undefined,
-      depositoId,
-      estoqueMinimo,
-      estoqueZerado,
-    })
+    const estoque = await getAllEstoque(filters)
 
     return NextResponse.json({
       success: true,
       data: estoque,
-      total: estoque.length,
       requestId,
     })
   } catch (error) {

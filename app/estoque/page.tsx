@@ -3,498 +3,333 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { toast } from "@/hooks/use-toast"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { toast } from "sonner"
 import {
   Package,
-  TrendingUp,
-  AlertTriangle,
-  Filter,
-  RefreshCw,
+  Search,
   Plus,
   Minus,
-  ArrowUpDown,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
   BarChart3,
-  Warehouse,
-  History,
-  AlertCircle,
+  Download,
+  RefreshCw,
+  Loader2,
 } from "lucide-react"
 
 interface EstoqueItem {
   id: number
   produto_id: number
-  produto_nome: string
-  produto_codigo: string
-  deposito_id: number
+  codigo: string
+  nome: string
+  categoria?: string
   deposito_nome: string
   quantidade_fisica: number
-  quantidade_virtual: number
   quantidade_disponivel: number
+  quantidade_reservada: number
   quantidade_minima: number
   custo_medio: number
-  valor_total: number
-}
-
-interface Deposito {
-  id: number
-  nome: string
-  descricao: string
-  ativo: boolean
-  padrao: boolean
+  valor_estoque: number
+  status_estoque: "NORMAL" | "BAIXO" | "ZERADO"
 }
 
 interface MovimentacaoEstoque {
   id: number
+  data_movimentacao: string
+  codigo: string
   produto_nome: string
-  produto_codigo: string
-  deposito_nome: string
-  tipo_movimentacao: string
+  tipo: string
+  operacao: "E" | "S"
   quantidade: number
-  quantidade_anterior: number
-  quantidade_nova: number
-  motivo: string
-  created_at: string
+  valor_unitario: number
+  valor_total: number
+  documento?: string
+  observacoes?: string
+  usuario?: string
 }
 
-interface AlertaEstoque {
-  id: number
-  produto_nome: string
-  produto_codigo: string
-  deposito_nome: string
-  tipo_alerta: string
-  quantidade_atual: number
-  quantidade_minima: number
-  data_alerta: string
+interface RelatorioEstoque {
+  resumo: {
+    total_produtos: number
+    produtos_baixo_estoque: number
+    produtos_zerados: number
+    valor_total_estoque: number
+  }
+  produtos: EstoqueItem[]
 }
 
 export default function EstoquePage() {
   const [estoque, setEstoque] = useState<EstoqueItem[]>([])
-  const [depositos, setDepositos] = useState<Deposito[]>([])
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoEstoque[]>([])
-  const [alertas, setAlertas] = useState<AlertaEstoque[]>([])
-  const [loading, setLoading] = useState(false)
-  const [filtros, setFiltros] = useState({
-    produto: "",
-    deposito: "",
-    estoqueMinimo: false,
-    estoqueZerado: false,
-  })
+  const [relatorio, setRelatorio] = useState<RelatorioEstoque | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filtroStatus, setFiltroStatus] = useState("todos")
 
   // Estados para movimentação
-  const [movimentacaoDialog, setMovimentacaoDialog] = useState(false)
-  const [movimentacaoForm, setMovimentacaoForm] = useState({
-    produto_id: "",
-    deposito_id: "",
-    tipo_movimentacao: "",
+  const [isMovimentacaoOpen, setIsMovimentacaoOpen] = useState(false)
+  const [produtoSelecionado, setProdutoSelecionado] = useState<EstoqueItem | null>(null)
+  const [tipoMovimentacao, setTipoMovimentacao] = useState<"entrada" | "saida">("entrada")
+  const [formMovimentacao, setFormMovimentacao] = useState({
     quantidade: "",
-    custo_unitario: "",
-    motivo: "",
+    valor_unitario: "",
+    documento: "",
     observacoes: "",
   })
+  const [submittingMovimentacao, setSubmittingMovimentacao] = useState(false)
+
+  useEffect(() => {
+    loadEstoque()
+    loadMovimentacoes()
+    loadRelatorio()
+  }, [])
 
   const loadEstoque = async () => {
-    setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (filtros.produto) params.set("produto", filtros.produto)
-      if (filtros.deposito) params.set("deposito", filtros.deposito)
-      if (filtros.estoqueMinimo) params.set("estoque_minimo", "true")
-      if (filtros.estoqueZerado) params.set("estoque_zerado", "true")
-
-      const response = await fetch(`/api/estoque?${params}`)
+      const response = await fetch("/api/estoque")
       const data = await response.json()
 
       if (data.success) {
         setEstoque(data.data)
       } else {
-        toast({
-          title: "Erro ao carregar estoque",
-          description: data.error,
-          variant: "destructive",
-        })
+        toast.error("Erro ao carregar estoque")
       }
     } catch (error) {
-      toast({
-        title: "Erro",
-        description: "Falha na comunicação com o servidor",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadDepositos = async () => {
-    try {
-      const response = await fetch("/api/estoque/depositos")
-      const data = await response.json()
-      if (data.success) {
-        setDepositos(data.data)
-      }
-    } catch (error) {
-      console.error("Erro ao carregar depósitos:", error)
+      toast.error("Erro ao carregar estoque")
+      console.error(error)
     }
   }
 
   const loadMovimentacoes = async () => {
     try {
-      const response = await fetch("/api/estoque/movimentacao?limit=20")
+      const response = await fetch("/api/estoque/movimentacao")
       const data = await response.json()
+
       if (data.success) {
         setMovimentacoes(data.data)
+      } else {
+        toast.error("Erro ao carregar movimentações")
       }
     } catch (error) {
-      console.error("Erro ao carregar movimentações:", error)
+      toast.error("Erro ao carregar movimentações")
+      console.error(error)
     }
   }
 
-  const loadAlertas = async () => {
+  const loadRelatorio = async () => {
     try {
-      const response = await fetch("/api/estoque/alertas")
+      setLoading(true)
+      const response = await fetch("/api/estoque/relatorio?tipo=geral")
       const data = await response.json()
+
       if (data.success) {
-        setAlertas(data.data)
+        setRelatorio(data.data)
+      } else {
+        toast.error("Erro ao carregar relatório")
       }
     } catch (error) {
-      console.error("Erro ao carregar alertas:", error)
+      toast.error("Erro ao carregar relatório")
+      console.error(error)
+    } finally {
+      setLoading(false)
     }
   }
 
   const handleMovimentacao = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    if (!produtoSelecionado) return
+
+    setSubmittingMovimentacao(true)
 
     try {
+      const payload = {
+        produto_id: produtoSelecionado.produto_id,
+        tipo: tipoMovimentacao === "entrada" ? "Ajuste de Entrada" : "Ajuste de Saída",
+        operacao: tipoMovimentacao === "entrada" ? "E" : "S",
+        quantidade: Number.parseFloat(formMovimentacao.quantidade),
+        valor_unitario: Number.parseFloat(formMovimentacao.valor_unitario) || 0,
+        documento: formMovimentacao.documento,
+        observacoes: formMovimentacao.observacoes,
+        usuario: "Sistema",
+      }
+
       const response = await fetch("/api/estoque/movimentacao", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...movimentacaoForm,
-          produto_id: Number.parseInt(movimentacaoForm.produto_id),
-          deposito_id: Number.parseInt(movimentacaoForm.deposito_id),
-          quantidade: Number.parseFloat(movimentacaoForm.quantidade),
-          custo_unitario: Number.parseFloat(movimentacaoForm.custo_unitario) || 0,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
 
       if (data.success) {
-        toast({
-          title: "Movimentação realizada",
-          description: "Estoque atualizado com sucesso",
-        })
-        setMovimentacaoDialog(false)
-        setMovimentacaoForm({
-          produto_id: "",
-          deposito_id: "",
-          tipo_movimentacao: "",
+        toast.success("Movimentação registrada com sucesso")
+        setIsMovimentacaoOpen(false)
+        setFormMovimentacao({
           quantidade: "",
-          custo_unitario: "",
-          motivo: "",
+          valor_unitario: "",
+          documento: "",
           observacoes: "",
         })
         loadEstoque()
         loadMovimentacoes()
+        loadRelatorio()
       } else {
-        toast({
-          title: "Erro na movimentação",
-          description: data.error,
-          variant: "destructive",
-        })
+        toast.error(data.error?.message || "Erro ao registrar movimentação")
       }
     } catch (error) {
-      toast({
-        title: "Erro",
-        description: "Falha na comunicação com o servidor",
-        variant: "destructive",
-      })
+      toast.error("Erro ao registrar movimentação")
+      console.error(error)
     } finally {
-      setLoading(false)
+      setSubmittingMovimentacao(false)
     }
   }
 
-  const sincronizarEstoque = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch("/api/bling/sync/estoque", {
-        method: "POST",
-      })
-      const data = await response.json()
-
-      if (data.success) {
-        toast({
-          title: "Sincronização concluída",
-          description: data.message,
-        })
-        loadEstoque()
-      } else {
-        toast({
-          title: "Erro na sincronização",
-          description: data.error,
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Erro",
-        description: "Falha na sincronização",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
+  const openMovimentacaoDialog = (produto: EstoqueItem, tipo: "entrada" | "saida") => {
+    setProdutoSelecionado(produto)
+    setTipoMovimentacao(tipo)
+    setFormMovimentacao({
+      quantidade: "",
+      valor_unitario: produto.custo_medio.toString(),
+      documento: "",
+      observacoes: "",
+    })
+    setIsMovimentacaoOpen(true)
   }
 
-  const getStatusBadge = (item: EstoqueItem) => {
-    if (item.quantidade_disponivel < 0) {
-      return <Badge variant="destructive">Negativo</Badge>
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString("pt-BR")
+  }
+
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+      NORMAL: "default",
+      BAIXO: "secondary",
+      ZERADO: "destructive",
     }
-    if (item.quantidade_disponivel === 0) {
-      return <Badge variant="secondary">Zerado</Badge>
+
+    const labels: Record<string, string> = {
+      NORMAL: "Normal",
+      BAIXO: "Baixo",
+      ZERADO: "Zerado",
     }
-    if (item.quantidade_disponivel <= item.quantidade_minima) {
-      return (
-        <Badge variant="outline" className="border-yellow-500 text-yellow-600">
-          Baixo
-        </Badge>
-      )
-    }
+
+    return <Badge variant={variants[status] || "outline"}>{labels[status] || status}</Badge>
+  }
+
+  const filteredEstoque = estoque.filter((item) => {
+    const matchesSearch =
+      item.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.codigo.toLowerCase().includes(searchTerm.toLowerCase())
+
+    const matchesStatus = filtroStatus === "todos" || item.status_estoque === filtroStatus.toUpperCase()
+
+    return matchesSearch && matchesStatus
+  })
+
+  if (loading) {
     return (
-      <Badge variant="default" className="bg-green-600">
-        OK
-      </Badge>
+      <div className="container mx-auto p-6">
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </div>
     )
-  }
-
-  const getTipoMovimentacaoIcon = (tipo: string) => {
-    switch (tipo) {
-      case "ENTRADA":
-        return <Plus className="h-4 w-4 text-green-600" />
-      case "SAIDA":
-        return <Minus className="h-4 w-4 text-red-600" />
-      case "TRANSFERENCIA":
-        return <ArrowUpDown className="h-4 w-4 text-blue-600" />
-      default:
-        return <Package className="h-4 w-4 text-gray-600" />
-    }
-  }
-
-  useEffect(() => {
-    loadEstoque()
-    loadDepositos()
-    loadMovimentacoes()
-    loadAlertas()
-  }, [])
-
-  useEffect(() => {
-    loadEstoque()
-  }, [filtros])
-
-  const stats = {
-    totalItens: estoque.length,
-    valorTotal: estoque.reduce((sum, item) => sum + item.valor_total, 0),
-    itensComEstoque: estoque.filter((item) => item.quantidade_disponivel > 0).length,
-    itensEstoqueBaixo: estoque.filter(
-      (item) => item.quantidade_disponivel <= item.quantidade_minima && item.quantidade_disponivel > 0,
-    ).length,
-    itensZerados: estoque.filter((item) => item.quantidade_disponivel === 0).length,
   }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Controle de Estoque</h1>
-          <p className="text-muted-foreground">Gestão completa do estoque integrado com Bling</p>
+          <p className="text-muted-foreground">Gerencie seu estoque e movimentações</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={sincronizarEstoque} disabled={loading} variant="outline">
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Sincronizar Bling
+          <Button variant="outline" onClick={loadRelatorio}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
           </Button>
-          <Dialog open={movimentacaoDialog} onOpenChange={setMovimentacaoDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Package className="h-4 w-4 mr-2" />
-                Nova Movimentação
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Nova Movimentação de Estoque</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleMovimentacao} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Produto</Label>
-                  <Select
-                    value={movimentacaoForm.produto_id}
-                    onValueChange={(value) => setMovimentacaoForm({ ...movimentacaoForm, produto_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o produto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {estoque.map((item) => (
-                        <SelectItem key={item.produto_id} value={item.produto_id.toString()}>
-                          {item.produto_nome} ({item.produto_codigo})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Depósito</Label>
-                  <Select
-                    value={movimentacaoForm.deposito_id}
-                    onValueChange={(value) => setMovimentacaoForm({ ...movimentacaoForm, deposito_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o depósito" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {depositos.map((deposito) => (
-                        <SelectItem key={deposito.id} value={deposito.id.toString()}>
-                          {deposito.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Tipo de Movimentação</Label>
-                  <Select
-                    value={movimentacaoForm.tipo_movimentacao}
-                    onValueChange={(value) => setMovimentacaoForm({ ...movimentacaoForm, tipo_movimentacao: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ENTRADA">Entrada</SelectItem>
-                      <SelectItem value="SAIDA">Saída</SelectItem>
-                      <SelectItem value="AJUSTE">Ajuste</SelectItem>
-                      <SelectItem value="INVENTARIO">Inventário</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Quantidade</Label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    value={movimentacaoForm.quantidade}
-                    onChange={(e) => setMovimentacaoForm({ ...movimentacaoForm, quantidade: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Custo Unitário</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={movimentacaoForm.custo_unitario}
-                    onChange={(e) => setMovimentacaoForm({ ...movimentacaoForm, custo_unitario: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Motivo</Label>
-                  <Input
-                    value={movimentacaoForm.motivo}
-                    onChange={(e) => setMovimentacaoForm({ ...movimentacaoForm, motivo: e.target.value })}
-                    placeholder="Ex: Venda, Compra, Ajuste..."
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setMovimentacaoDialog(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? "Processando..." : "Confirmar"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar
+          </Button>
         </div>
       </div>
 
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Itens</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalItens}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {stats.valorTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Com Estoque</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.itensComEstoque}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estoque Baixo</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{stats.itensEstoqueBaixo}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Zerados</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.itensZerados}</div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Cards de Resumo */}
+      {relatorio && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total de Produtos</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{relatorio.resumo.total_produtos}</div>
+            </CardContent>
+          </Card>
 
-      {/* Alertas */}
-      {alertas.length > 0 && (
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            Você tem {alertas.length} alerta(s) de estoque pendente(s). Verifique a aba "Alertas" para mais detalhes.
-          </AlertDescription>
-        </Alert>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Estoque Baixo</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">{relatorio.resumo.produtos_baixo_estoque}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Produtos Zerados</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">{relatorio.resumo.produtos_zerados}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(relatorio.resumo.valor_total_estoque)}</div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <Tabs defaultValue="estoque" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="estoque">Estoque</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="estoque">Estoque Atual</TabsTrigger>
           <TabsTrigger value="movimentacoes">Movimentações</TabsTrigger>
-          <TabsTrigger value="alertas">Alertas ({alertas.length})</TabsTrigger>
-          <TabsTrigger value="depositos">Depósitos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="estoque" className="space-y-6">
@@ -502,112 +337,96 @@ export default function EstoquePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Filter className="h-5 w-5" />
+                <Search className="h-5 w-5" />
                 Filtros
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Produto</Label>
+                  <Label>Buscar produto</Label>
                   <Input
-                    placeholder="Nome do produto..."
-                    value={filtros.produto}
-                    onChange={(e) => setFiltros({ ...filtros, produto: e.target.value })}
+                    placeholder="Código ou nome do produto..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Depósito</Label>
-                  <Select
-                    value={filtros.deposito}
-                    onValueChange={(value) => setFiltros({ ...filtros, deposito: value })}
-                  >
+                  <Label>Status do estoque</Label>
+                  <Select value={filtroStatus} onValueChange={setFiltroStatus}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Todos os depósitos" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos os depósitos</SelectItem>
-                      {depositos.map((deposito) => (
-                        <SelectItem key={deposito.id} value={deposito.id.toString()}>
-                          {deposito.nome}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="todos">Todos</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="baixo">Baixo</SelectItem>
+                      <SelectItem value="zerado">Zerado</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="estoque-minimo"
-                    checked={filtros.estoqueMinimo}
-                    onChange={(e) => setFiltros({ ...filtros, estoqueMinimo: e.target.checked })}
-                  />
-                  <Label htmlFor="estoque-minimo">Apenas estoque baixo</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="estoque-zerado"
-                    checked={filtros.estoqueZerado}
-                    onChange={(e) => setFiltros({ ...filtros, estoqueZerado: e.target.checked })}
-                  />
-                  <Label htmlFor="estoque-zerado">Apenas zerados</Label>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Tabela de Estoque */}
+          {/* Lista de Estoque */}
           <Card>
             <CardHeader>
-              <CardTitle>Itens em Estoque</CardTitle>
-              <CardDescription>{estoque.length} itens encontrados</CardDescription>
+              <CardTitle>Produtos em Estoque ({filteredEstoque.length})</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Depósito</TableHead>
-                    <TableHead>Disponível</TableHead>
-                    <TableHead>Mínimo</TableHead>
-                    <TableHead>Custo Médio</TableHead>
-                    <TableHead>Valor Total</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {estoque.map((item) => (
-                    <TableRow key={`${item.produto_id}-${item.deposito_id}`}>
-                      <TableCell className="font-medium">{item.produto_nome}</TableCell>
-                      <TableCell>
-                        <code className="bg-muted px-2 py-1 rounded text-sm">{item.produto_codigo}</code>
-                      </TableCell>
-                      <TableCell>{item.deposito_nome}</TableCell>
-                      <TableCell>{item.quantidade_disponivel.toFixed(3)}</TableCell>
-                      <TableCell>{item.quantidade_minima?.toFixed(3) || "-"}</TableCell>
-                      <TableCell>R$ {item.custo_medio.toFixed(2)}</TableCell>
-                      <TableCell>R$ {item.valor_total.toFixed(2)}</TableCell>
-                      <TableCell>{getStatusBadge(item)}</TableCell>
-                    </TableRow>
-                  ))}
-                  {estoque.length === 0 && !loading && (
+              {filteredEstoque.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto mb-4" />
+                  <p>Nenhum produto encontrado</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                        Nenhum item encontrado
-                      </TableCell>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Disponível</TableHead>
+                      <TableHead>Reservado</TableHead>
+                      <TableHead>Mínimo</TableHead>
+                      <TableHead>Custo Médio</TableHead>
+                      <TableHead>Valor Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Ações</TableHead>
                     </TableRow>
-                  )}
-                  {loading && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto" />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEstoque.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{item.nome}</div>
+                            <div className="text-sm text-muted-foreground font-mono">{item.codigo}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.categoria || "-"}</TableCell>
+                        <TableCell className="font-mono">{item.quantidade_disponivel}</TableCell>
+                        <TableCell className="font-mono">{item.quantidade_reservada}</TableCell>
+                        <TableCell className="font-mono">{item.quantidade_minima}</TableCell>
+                        <TableCell>{formatCurrency(item.custo_medio)}</TableCell>
+                        <TableCell>{formatCurrency(item.valor_estoque)}</TableCell>
+                        <TableCell>{getStatusBadge(item.status_estoque)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm" onClick={() => openMovimentacaoDialog(item, "entrada")}>
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => openMovimentacaoDialog(item, "saida")}>
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -615,160 +434,142 @@ export default function EstoquePage() {
         <TabsContent value="movimentacoes" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Últimas Movimentações
-              </CardTitle>
-              <CardDescription>Histórico das 20 últimas movimentações de estoque</CardDescription>
+              <CardTitle>Últimas Movimentações</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Depósito</TableHead>
-                    <TableHead>Quantidade</TableHead>
-                    <TableHead>Anterior</TableHead>
-                    <TableHead>Nova</TableHead>
-                    <TableHead>Motivo</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {movimentacoes.map((mov) => (
-                    <TableRow key={mov.id}>
-                      <TableCell>{new Date(mov.created_at).toLocaleString("pt-BR")}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getTipoMovimentacaoIcon(mov.tipo_movimentacao)}
-                          {mov.tipo_movimentacao}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {mov.produto_nome} ({mov.produto_codigo})
-                      </TableCell>
-                      <TableCell>{mov.deposito_nome}</TableCell>
-                      <TableCell>{mov.quantidade.toFixed(3)}</TableCell>
-                      <TableCell>{mov.quantidade_anterior.toFixed(3)}</TableCell>
-                      <TableCell>{mov.quantidade_nova.toFixed(3)}</TableCell>
-                      <TableCell>{mov.motivo || "-"}</TableCell>
-                    </TableRow>
-                  ))}
-                  {movimentacoes.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                        Nenhuma movimentação encontrada
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="alertas" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" />
-                Alertas de Estoque
-              </CardTitle>
-              <CardDescription>Produtos que requerem atenção</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {alertas.length > 0 ? (
-                <div className="space-y-4">
-                  {alertas.map((alerta) => (
-                    <Alert key={alerta.id} className="border-yellow-200 bg-yellow-50">
-                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                      <AlertDescription>
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <strong>
-                              {alerta.produto_nome} ({alerta.produto_codigo})
-                            </strong>{" "}
-                            - {alerta.deposito_nome}
-                            <br />
-                            <span className="text-sm text-muted-foreground">
-                              {alerta.tipo_alerta === "ESTOQUE_BAIXO" && "Estoque baixo: "}
-                              {alerta.tipo_alerta === "ESTOQUE_ZERADO" && "Estoque zerado: "}
-                              {alerta.tipo_alerta === "ESTOQUE_NEGATIVO" && "Estoque negativo: "}
-                              {alerta.quantidade_atual} unidades
-                              {alerta.tipo_alerta === "ESTOQUE_BAIXO" && ` (mínimo: ${alerta.quantidade_minima})`}
-                            </span>
-                          </div>
-                          <Badge variant="outline" className="border-yellow-500 text-yellow-600">
-                            {alerta.tipo_alerta.replace("_", " ")}
-                          </Badge>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
-                  ))}
+              {movimentacoes.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <TrendingUp className="h-12 w-12 mx-auto mb-4" />
+                  <p>Nenhuma movimentação encontrada</p>
                 </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-green-600" />
-                  <p>Nenhum alerta de estoque no momento</p>
-                  <p className="text-sm">Todos os produtos estão com estoque adequado</p>
-                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Operação</TableHead>
+                      <TableHead>Quantidade</TableHead>
+                      <TableHead>Valor Unit.</TableHead>
+                      <TableHead>Valor Total</TableHead>
+                      <TableHead>Documento</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {movimentacoes.slice(0, 50).map((mov) => (
+                      <TableRow key={mov.id}>
+                        <TableCell>{formatDate(mov.data_movimentacao)}</TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{mov.produto_nome}</div>
+                            <div className="text-sm text-muted-foreground font-mono">{mov.codigo}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{mov.tipo}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {mov.operacao === "E" ? (
+                              <TrendingUp className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <TrendingDown className="h-4 w-4 text-red-600" />
+                            )}
+                            {mov.operacao === "E" ? "Entrada" : "Saída"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono">{mov.quantidade}</TableCell>
+                        <TableCell>{formatCurrency(mov.valor_unitario)}</TableCell>
+                        <TableCell>{formatCurrency(mov.valor_total)}</TableCell>
+                        <TableCell>{mov.documento || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="depositos" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Warehouse className="h-5 w-5" />
-                Depósitos
-              </CardTitle>
-              <CardDescription>Gerenciar depósitos de estoque</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Padrão</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {depositos.map((deposito) => (
-                    <TableRow key={deposito.id}>
-                      <TableCell className="font-medium">{deposito.nome}</TableCell>
-                      <TableCell>{deposito.descricao || "-"}</TableCell>
-                      <TableCell>
-                        <Badge variant={deposito.ativo ? "default" : "secondary"}>
-                          {deposito.ativo ? "Ativo" : "Inativo"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {deposito.padrao && (
-                          <Badge variant="outline" className="border-blue-500 text-blue-600">
-                            Padrão
-                          </Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {depositos.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        Nenhum depósito cadastrado
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
+
+      {/* Dialog de Movimentação */}
+      <Dialog open={isMovimentacaoOpen} onOpenChange={setIsMovimentacaoOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tipoMovimentacao === "entrada" ? "Entrada" : "Saída"} de Estoque</DialogTitle>
+            <DialogDescription>
+              {produtoSelecionado && (
+                <>
+                  Produto: {produtoSelecionado.nome} ({produtoSelecionado.codigo})
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleMovimentacao} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="quantidade">Quantidade *</Label>
+                <Input
+                  id="quantidade"
+                  type="number"
+                  step="0.001"
+                  min="0.001"
+                  value={formMovimentacao.quantidade}
+                  onChange={(e) => setFormMovimentacao((prev) => ({ ...prev, quantidade: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="valor_unitario">Valor Unitário</Label>
+                <Input
+                  id="valor_unitario"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formMovimentacao.valor_unitario}
+                  onChange={(e) => setFormMovimentacao((prev) => ({ ...prev, valor_unitario: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="documento">Documento</Label>
+              <Input
+                id="documento"
+                value={formMovimentacao.documento}
+                onChange={(e) => setFormMovimentacao((prev) => ({ ...prev, documento: e.target.value }))}
+                placeholder="Número do documento (opcional)"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="observacoes">Observações</Label>
+              <Input
+                id="observacoes"
+                value={formMovimentacao.observacoes}
+                onChange={(e) => setFormMovimentacao((prev) => ({ ...prev, observacoes: e.target.value }))}
+                placeholder="Observações (opcional)"
+              />
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsMovimentacaoOpen(false)}
+                disabled={submittingMovimentacao}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={submittingMovimentacao}>
+                {submittingMovimentacao && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Confirmar {tipoMovimentacao === "entrada" ? "Entrada" : "Saída"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

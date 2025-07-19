@@ -1,39 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['@vercel/postgres'],
   experimental: {
-    serverActions: {
-      allowedOrigins: ['localhost:3000', '*.vercel.app'],
-    },
+    serverComponentsExternalPackages: ['pg']
   },
   env: {
-    BLING_API_URL: process.env.BLING_API_URL || 'https://www.bling.com.br/Api/v3',
-    BLING_CLIENT_ID: process.env.BLING_CLIENT_ID,
-    BLING_CLIENT_SECRET: process.env.BLING_CLIENT_SECRET,
-    BLING_ACCESS_TOKEN: process.env.BLING_ACCESS_TOKEN,
-    BLING_WEBHOOK_SECRET: process.env.BLING_WEBHOOK_SECRET,
-    NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
+    CUSTOM_KEY: 'my-value',
   },
-  async headers() {
-    return [
+  images: {
+    domains: ['localhost', 'vercel.app'],
+    remotePatterns: [
       {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: '*',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, OPTIONS',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization',
-          },
-        ],
+        protocol: 'https',
+        hostname: '**',
       },
-    ]
+    ],
+    unoptimized: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -41,8 +22,53 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  images: {
-    unoptimized: true,
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+        ],
+      },
+    ]
+  },
+  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    // Configurações personalizadas do webpack
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+    }
+    
+    return config
+  },
+  // Configurações de build
+  output: 'standalone',
+  poweredByHeader: false,
+  compress: true,
+  
+  // Configurações de redirecionamento
+  async redirects() {
+    return [
+      {
+        source: '/home',
+        destination: '/',
+        permanent: true,
+      },
+    ]
+  },
+  
+  // Configurações de rewrite
+  async rewrites() {
+    return [
+      {
+        source: '/api/v1/:path*',
+        destination: '/api/:path*',
+      },
+    ]
   },
 }
 

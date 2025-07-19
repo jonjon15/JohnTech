@@ -1,87 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { exchangeCodeForTokens, saveTokens } from "@/lib/bling-auth"
 
-const userEmail = "admin@johntech.com"
+const USER_EMAIL = process.env.BLING_USER_EMAIL || "default_user@example.com"
 
 export async function GET(request: NextRequest) {
-  const startTime = Date.now()
-  const requestId = crypto.randomUUID()
+  const { searchParams } = new URL(request.url)
+  const code = searchParams.get("code")
+  const state = searchParams.get("state")
 
-  try {
-    console.log(`🔄 [${requestId}] OAuth Callback - INÍCIO`)
-
-    const searchParams = request.nextUrl.searchParams
-    const code = searchParams.get("code")
-    const error = searchParams.get("error")
-    const state = searchParams.get("state")
-
-    console.log(`📋 [${requestId}] Parâmetros:`, { code: !!code, error, state })
-
-    // Verificar se houve erro na autorização
-    if (error) {
-      console.error(`❌ [${requestId}] Erro OAuth:`, error)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", error)
-      errorUrl.searchParams.set("message", "Erro na autorização OAuth")
-      return NextResponse.redirect(errorUrl)
-    }
-
-    // Verificar se o código foi fornecido
-    if (!code) {
-      console.error(`❌ [${requestId}] Código não fornecido`)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", "missing_code")
-      errorUrl.searchParams.set("message", "Código de autorização não fornecido")
-      return NextResponse.redirect(errorUrl)
-    }
-
-    // Construir redirect URI
-    const redirectUri = new URL("/api/bling/oauth/callback", request.nextUrl.origin).toString()
-    console.log(`🔗 [${requestId}] Redirect URI:`, redirectUri)
-
-    // Trocar código por tokens
-    console.log(`🔄 [${requestId}] Trocando código por tokens...`)
-    const tokenData = await exchangeCodeForTokens(code, redirectUri)
-
-    if (!tokenData) {
-      console.error(`❌ [${requestId}] Falha na troca de tokens`)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", "token_exchange_failed")
-      errorUrl.searchParams.set("message", "Falha ao obter tokens do Bling")
-      return NextResponse.redirect(errorUrl)
-    }
-
-    // Salvar tokens no banco
-    console.log(`💾 [${requestId}] Salvando tokens...`)
-    const saved = await saveTokens(userEmail, tokenData)
-
-    if (!saved) {
-      console.error(`❌ [${requestId}] Falha ao salvar tokens`)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", "save_failed")
-      errorUrl.searchParams.set("message", "Falha ao salvar tokens no banco")
-      return NextResponse.redirect(errorUrl)
-    }
-
-    const elapsedTime = Date.now() - startTime
-    console.log(`✅ [${requestId}] OAuth concluído em ${elapsedTime}ms`)
-
-    // Redirecionar para página de sucesso
-    const successUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-    successUrl.searchParams.set("success", "true")
-    successUrl.searchParams.set("message", "Autenticação realizada com sucesso")
-    successUrl.searchParams.set("elapsed_time", elapsedTime.toString())
-
-    return NextResponse.redirect(successUrl)
-  } catch (error: any) {
-    const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro no callback OAuth:`, error)
-
-    const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-    errorUrl.searchParams.set("error", "internal_error")
-    errorUrl.searchParams.set("message", error.message || "Erro interno no callback")
-    errorUrl.searchParams.set("elapsed_time", elapsedTime.toString())
-
-    return NextResponse.redirect(errorUrl)
+  if (!code) {
+    return NextResponse.json({ error: "Código de autorização não encontrado" }, { status: 400 })
   }
+
+  // Opcional: validar o 'state' aqui se você o estiver usando
+
+  const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/bling/oauth/callback`
+  const tokenData = await exchangeCodeForTokens(code, redirectUri)
+
+  if (!tokenData) {
+    return NextResponse.json({ error: "Falha ao obter tokens de acesso" }, { status: 500 })
+  }
+
+  const saved = await saveTokens(USER_EMAIL, tokenData)
+
+  if (!saved) {
+    return NextResponse.json({ error: "Falha ao salvar tokens no banco de dados" }, { status: 500 })
+  }
+
+  // Redirecionar para a página de homologação ou dashboard
+  return NextResponse.redirect(new URL("/homologacao", request.url))
 }

@@ -15,6 +15,10 @@ export interface EstoqueItem {
   data_ultima_movimentacao?: Date
   created_at?: Date
   updated_at?: Date
+  // Campos extras para joins
+  produto_nome?: string
+  produto_codigo?: string
+  deposito_nome?: string
 }
 
 export interface MovimentacaoEstoque {
@@ -32,6 +36,10 @@ export interface MovimentacaoEstoque {
   usuario_id?: string
   observacoes?: string
   created_at?: Date
+  // Campos extras para joins
+  produto_nome?: string
+  produto_codigo?: string
+  deposito_nome?: string
 }
 
 export interface Deposito {
@@ -56,6 +64,10 @@ export interface AlertaEstoque {
   data_alerta: Date
   resolvido: boolean
   created_at?: Date
+  // Campos extras para joins
+  produto_nome?: string
+  produto_codigo?: string
+  deposito_nome?: string
 }
 
 export interface RelatorioEstoque {
@@ -72,4 +84,18 @@ export interface RelatorioEstoque {
   valor_total: number
   status: "OK" | "BAIXO" | "ZERADO" | "NEGATIVO"
   dias_sem_movimentacao: number
+}
+
+export interface SyncEstoqueResult {
+  success: boolean
+  processados: number
+  sincronizados: number
+  erros: number
+  alertas_criados: number
+  detalhes: Array<{
+    produto_id: number
+    produto_nome: string
+    status: "sucesso" | "erro"
+    erro?: string
+  }>
 }

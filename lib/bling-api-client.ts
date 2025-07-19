@@ -1,169 +1,79 @@
-/**
- * Cliente oficial da API Bling v3
- * Baseado na documentação: https://developer.bling.com.br
- */
+import { getTokens } from "@/lib/db"
+import type { BlingProduct, CreateProductRequest, UpdateProductRequest } from "@/types/bling"
+import type { BlingErrorResponse } from "@/lib/bling-error-handler"
 
-export interface BlingApiConfig {
-  baseUrl: string
-  clientId: string
-  clientSecret: string
-  redirectUri: string
-  scopes: string[]
+const BLING_API_BASE_URL = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+const USER_EMAIL = process.env.BLING_USER_EMAIL || "default_user@example.com" // Usar um email padrão ou de configuração
+
+interface BlingApiResponse<T> {
+  data?: T
+  error?: BlingErrorResponse
 }
 
-export interface BlingApiResponse<T = any> {
-  data: T
-  errors?: BlingError[]
-  meta?: {
-    page?: number
-    limit?: number
-    total?: number
-  }
-}
+// Função para obter um cliente Bling API com token de acesso válido
+export async function getBlingApiClient() {
+  const tokens = await getTokens(USER_EMAIL)
 
-export interface BlingError {
-  code: string
-  message: string
-  field?: string
-}
-
-export type BlingProduct = {}
-
-export type CreateProductRequest = {}
-
-export type UpdateProductRequest = {}
-
-export type BlingCategory = {}
-
-export type BlingStock = {}
-
-export type StockUpdate = {}
-
-export type BlingOrder = {}
-
-export type CreateOrderRequest = {}
-
-export type BlingContact = {}
-
-export class BlingApiClient {
-  private config: BlingApiConfig
-  private accessToken?: string
-
-  constructor(config: BlingApiConfig) {
-    this.config = config
+  if (!tokens || new Date() > new Date(tokens.expires_at)) {
+    // Aqui você precisaria de uma lógica para refrescar o token
+    // Por simplicidade, vamos lançar um erro ou redirecionar para reautenticação
+    throw new Error("Token Bling expirado ou não encontrado. Por favor, reautentique.")
   }
 
-  // Produtos
-  async getProducts(params?: {
-    page?: number
-    limit?: number
-    criterio?: 1 | 2 | 3 // 1=ID, 2=Código, 3=Descrição
-    tipo?: "P" | "S" // P=Produto, S=Serviço
-    situacao?: "A" | "I" // A=Ativo, I=Inativo
-    codigo?: string
-    nome?: string
-    idCategoria?: number
-  }): Promise<BlingApiResponse<BlingProduct[]>> {
-    return this.request("GET", "/produtos", { params })
-  }
+  const accessToken = tokens.access_token
 
-  async createProduct(product: CreateProductRequest): Promise<BlingApiResponse<BlingProduct>> {
-    return this.request("POST", "/produtos", { body: product })
-  }
-
-  async updateProduct(id: number, product: UpdateProductRequest): Promise<BlingApiResponse<BlingProduct>> {
-    return this.request("PUT", `/produtos/${id}`, { body: product })
-  }
-
-  async deleteProduct(id: number): Promise<BlingApiResponse<void>> {
-    return this.request("DELETE", `/produtos/${id}`)
-  }
-
-  // Categorias
-  async getCategories(): Promise<BlingApiResponse<BlingCategory[]>> {
-    return this.request("GET", "/categorias")
-  }
-
-  // Estoque
-  async getStock(params?: {
-    idsProdutos?: number[]
-    idsDepositos?: number[]
-  }): Promise<BlingApiResponse<BlingStock[]>> {
-    return this.request("GET", "/estoques", { params })
-  }
-
-  async updateStock(updates: StockUpdate[]): Promise<BlingApiResponse<void>> {
-    return this.request("PUT", "/estoques", { body: { estoques: updates } })
-  }
-
-  // Pedidos
-  async getOrders(params?: {
-    page?: number
-    limit?: number
-    dataInicial?: string
-    dataFinal?: string
-    situacao?: number
-  }): Promise<BlingApiResponse<BlingOrder[]>> {
-    return this.request("GET", "/pedidos/vendas", { params })
-  }
-
-  async createOrder(order: CreateOrderRequest): Promise<BlingApiResponse<BlingOrder>> {
-    return this.request("POST", "/pedidos/vendas", { body: order })
-  }
-
-  // Contatos
-  async getContacts(params?: {
-    page?: number
-    limit?: number
-    tipo?: "C" | "F" | "T" // C=Cliente, F=Fornecedor, T=Transportadora
-  }): Promise<BlingApiResponse<BlingContact[]>> {
-    return this.request("GET", "/contatos", { params })
-  }
-
-  // Método base para requisições
-  private async request<T>(
-    method: string,
-    endpoint: string,
-    options?: {
-      params?: Record<string, any>
-      body?: any
-      headers?: Record<string, string>
-    },
-  ): Promise<BlingApiResponse<T>> {
-    const url = new URL(endpoint, this.config.baseUrl)
-
-    if (options?.params) {
-      Object.entries(options.params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          url.searchParams.set(key, String(value))
-        }
-      })
-    }
-
-    const headers: Record<string, string> = {
-      Accept: "application/json",
+  const makeRequest = async (method: string, path: string, body?: any): Promise<BlingApiResponse<any>> => {
+    const url = `${BLING_API_BASE_URL}${path}`
+    const headers = {
       "Content-Type": "application/json",
-      ...options?.headers,
+      Authorization: `Bearer ${accessToken}`,
     }
 
-    if (this.accessToken) {
-      headers["Authorization"] = `Bearer ${this.accessToken}`
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      })
+
+      const responseData = await response.json()
+
+      if (!response.ok) {
+        // Bling API retorna erros no formato { error: { code, message } }
+        return {
+          error: {
+            code: responseData.error?.code || response.status.toString(),
+            message: responseData.error?.message || response.statusText,
+            statusCode: response.status,
+            details: responseData.error?.details || responseData,
+          },
+        }
+      }
+
+      return { data: responseData }
+    } catch (error: any) {
+      console.error(`Erro na requisição Bling API (${method} ${path}):`, error)
+      return {
+        error: {
+          code: "NETWORK_ERROR",
+          message: error.message || "Erro de rede ou comunicação com a API Bling",
+          statusCode: 500,
+          details: error,
+        },
+      }
     }
-
-    const response = await fetch(url.toString(), {
-      method,
-      headers,
-      body: options?.body ? JSON.stringify(options.body) : undefined,
-    })
-
-    if (!response.ok) {
-      throw new Error(`Bling API Error: ${response.status} ${response.statusText}`)
-    }
-
-    return response.json()
   }
 
-  setAccessToken(token: string) {
-    this.accessToken = token
+  return {
+    products: {
+      get: async (id: number): Promise<BlingApiResponse<BlingProduct>> => makeRequest(`GET`, `/produtos/${id}`),
+      list: async (): Promise<BlingApiResponse<{ produtos: BlingProduct[] }>> => makeRequest(`GET`, `/produtos`),
+      create: async (product: CreateProductRequest): Promise<BlingApiResponse<BlingProduct>> =>
+        makeRequest(`POST`, `/produtos`, product),
+      update: async (id: number, product: UpdateProductRequest): Promise<BlingApiResponse<BlingProduct>> =>
+        makeRequest(`PUT`, `/produtos/${id}`, product),
+      delete: async (id: number): Promise<BlingApiResponse<any>> => makeRequest(`DELETE`, `/produtos/${id}`),
+    },
+    // Adicione outros recursos da API Bling aqui (pedidos, contatos, etc.)
   }
 }

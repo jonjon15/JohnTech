@@ -21,7 +21,7 @@ export async function getEstoqueByProduto(produtoId: number, depositoId?: number
     query += " ORDER BY d.nome"
 
     const result = await pool.query(query, params)
-    return result.rows
+    return result.rows.map(normalizeEstoqueItem)
   } catch (error) {
     console.error("Erro ao buscar estoque por produto:", error)
     throw error
@@ -41,7 +41,7 @@ export async function getEstoqueByDeposito(depositoId: number): Promise<EstoqueI
     `,
       [depositoId],
     )
-    return result.rows
+    return result.rows.map(normalizeEstoqueItem)
   } catch (error) {
     console.error("Erro ao buscar estoque por depósito:", error)
     throw error
@@ -88,7 +88,7 @@ export async function getAllEstoque(filters?: {
     query += " ORDER BY p.nome, d.nome"
 
     const result = await pool.query(query, params)
-    return result.rows
+    return result.rows.map(normalizeEstoqueItem)
   } catch (error) {
     console.error("Erro ao buscar todo estoque:", error)
     throw error
@@ -137,7 +137,7 @@ export async function createOrUpdateEstoque(
         estoque.localizacao || null,
       ],
     )
-    return result.rows[0]
+    return normalizeEstoqueItem(result.rows[0])
   } catch (error) {
     console.error("Erro ao criar/atualizar estoque:", error)
     throw error
@@ -170,18 +170,18 @@ export async function movimentarEstoque(
     // Calcular nova quantidade baseada no tipo de movimentação
     switch (movimentacao.tipo_movimentacao) {
       case "ENTRADA":
-      case "AJUSTE":
-        novaQuantidade = movimentacao.quantidade_nova
+        novaQuantidade = estoque.quantidade_disponivel + movimentacao.quantidade
         break
       case "SAIDA":
         novaQuantidade = estoque.quantidade_disponivel - movimentacao.quantidade
         break
+      case "AJUSTE":
+      case "INVENTARIO":
+        novaQuantidade = movimentacao.quantidade_nova
+        break
       case "TRANSFERENCIA":
         // Para transferência, a quantidade é negativa no depósito origem
         novaQuantidade = estoque.quantidade_disponivel + movimentacao.quantidade
-        break
-      case "INVENTARIO":
-        novaQuantidade = movimentacao.quantidade_nova
         break
     }
 
@@ -212,6 +212,7 @@ export async function movimentarEstoque(
     )
 
     // Atualizar estoque
+    const novoValorTotal = novaQuantidade * (movimentacao.custo_unitario || estoque.custo_medio || 0)
     await client.query(
       `
       UPDATE estoque SET
@@ -219,19 +220,25 @@ export async function movimentarEstoque(
         quantidade_virtual = $3,
         quantidade_disponivel = $3,
         custo_medio = CASE 
-          WHEN $3 > 0 THEN ($4 + (quantidade_disponivel * custo_medio)) / ($3 + quantidade_disponivel)
+          WHEN $4 > 0 THEN $4
           ELSE custo_medio
         END,
-        valor_total = $3 * custo_medio,
+        valor_total = $5,
         data_ultima_movimentacao = NOW(),
         updated_at = NOW()
       WHERE produto_id = $1 AND deposito_id = $2
     `,
-      [movimentacao.produto_id, movimentacao.deposito_id, novaQuantidade, movimentacao.valor_total],
+      [
+        movimentacao.produto_id,
+        movimentacao.deposito_id,
+        novaQuantidade,
+        movimentacao.custo_unitario || estoque.custo_medio,
+        novoValorTotal,
+      ],
     )
 
     await client.query("COMMIT")
-    return movResult.rows[0]
+    return normalizeMovimentacao(movResult.rows[0])
   } catch (error) {
     await client.query("ROLLBACK")
     console.error("Erro ao movimentar estoque:", error)
@@ -289,7 +296,7 @@ export async function getAlertasEstoque(): Promise<AlertaEstoque[]> {
       WHERE a.resolvido = false
       ORDER BY a.created_at DESC
     `)
-    return result.rows
+    return result.rows.map(normalizeAlerta)
   } catch (error) {
     console.error("Erro ao buscar alertas de estoque:", error)
     throw error
@@ -320,7 +327,7 @@ export async function criarAlertaEstoque(alerta: Omit<AlertaEstoque, "id" | "cre
         alerta.resolvido,
       ],
     )
-    return result.rows[0]
+    return normalizeAlerta(result.rows[0])
   } catch (error) {
     console.error("Erro ao criar alerta de estoque:", error)
     throw error
@@ -362,7 +369,7 @@ export async function getRelatorioEstoque(): Promise<RelatorioEstoque[]> {
         END,
         p.nome
     `)
-    return result.rows
+    return result.rows.map(normalizeRelatorio)
   } catch (error) {
     console.error("Erro ao gerar relatório de estoque:", error)
     throw error
@@ -415,9 +422,55 @@ export async function getMovimentacoesEstoque(
     params.push(limit)
 
     const result = await pool.query(query, params)
-    return result.rows
+    return result.rows.map(normalizeMovimentacao)
   } catch (error) {
     console.error("Erro ao buscar movimentações de estoque:", error)
     throw error
+  }
+}
+
+// Funções de normalização
+function normalizeEstoqueItem(row: any): EstoqueItem {
+  return {
+    ...row,
+    quantidade_fisica: Number.parseFloat(row.quantidade_fisica) || 0,
+    quantidade_virtual: Number.parseFloat(row.quantidade_virtual) || 0,
+    quantidade_disponivel: Number.parseFloat(row.quantidade_disponivel) || 0,
+    quantidade_minima: row.quantidade_minima ? Number.parseFloat(row.quantidade_minima) : undefined,
+    quantidade_maxima: row.quantidade_maxima ? Number.parseFloat(row.quantidade_maxima) : undefined,
+    custo_medio: Number.parseFloat(row.custo_medio) || 0,
+    valor_total: Number.parseFloat(row.valor_total) || 0,
+  }
+}
+
+function normalizeMovimentacao(row: any): MovimentacaoEstoque {
+  return {
+    ...row,
+    quantidade: Number.parseFloat(row.quantidade) || 0,
+    quantidade_anterior: Number.parseFloat(row.quantidade_anterior) || 0,
+    quantidade_nova: Number.parseFloat(row.quantidade_nova) || 0,
+    custo_unitario: Number.parseFloat(row.custo_unitario) || 0,
+    valor_total: Number.parseFloat(row.valor_total) || 0,
+  }
+}
+
+function normalizeAlerta(row: any): AlertaEstoque {
+  return {
+    ...row,
+    quantidade_atual: Number.parseFloat(row.quantidade_atual) || 0,
+    quantidade_minima: Number.parseFloat(row.quantidade_minima) || 0,
+  }
+}
+
+function normalizeRelatorio(row: any): RelatorioEstoque {
+  return {
+    ...row,
+    quantidade_fisica: Number.parseFloat(row.quantidade_fisica) || 0,
+    quantidade_virtual: Number.parseFloat(row.quantidade_virtual) || 0,
+    quantidade_disponivel: Number.parseFloat(row.quantidade_disponivel) || 0,
+    quantidade_minima: Number.parseFloat(row.quantidade_minima) || 0,
+    valor_unitario: Number.parseFloat(row.valor_unitario) || 0,
+    valor_total: Number.parseFloat(row.valor_total) || 0,
+    dias_sem_movimentacao: Number.parseInt(row.dias_sem_movimentacao) || 0,
   }
 }
