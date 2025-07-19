@@ -46,6 +46,7 @@ export default function HomologacaoPage() {
     marca: "",
     observacoes: "",
   })
+  // Todas as duplicatas removidas acima. Apenas a primeira ocorrência de cada função/estado permanece.
   const [testResults, setTestResults] = useState({
     auth: { status: "pending", message: "Aguardando execução" },
     createProduct: { status: "pending", message: "Aguardando execução" },
