@@ -81,3 +81,7 @@ export function logBlingApiCall(
     console.log(logMessage, "Response:", responseData)
   }
 }
+
+// --- aliases exigidos pelo deploy ---
+export { handleBlingApiError as handleBlingError }
+export { logBlingApiCall as logRequest }

@@ -76,3 +76,5 @@ export async function makeRequest<T>(
     return createBlingApiResponse(false, null, errorDetails)
   }
 }
+
+export const getBlingApiClient = makeRequest

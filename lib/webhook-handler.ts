@@ -81,3 +81,14 @@ export class BlingWebhookHandler {
     })
   }
 }
+
+// Handler simples para exportações do sistema
+export async function handleWebhookEvent(secret: string, rawBody: string, signature: string) {
+  const handler = new BlingWebhookHandler(secret)
+  handler.setupDefaultHandlers()
+  if (!handler.validateSignature(rawBody, signature)) {
+    throw new Error("Assinatura inválida")
+  }
+  const event: WebhookEvent = JSON.parse(rawBody)
+  await handler.process(event)
+}

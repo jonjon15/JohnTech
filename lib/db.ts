@@ -1,4 +1,5 @@
 import { Pool } from "pg"
+import { getTokens } from "./tokens" // Import the getTokens function
 
 // Variável global para armazenar o pool de conexões
 let pool: Pool | null = null
@@ -399,6 +400,10 @@ function normalizeProduct(row: any): Product {
     preco: typeof row.preco === "string" ? Number.parseFloat(row.preco) : row.preco,
   }
 }
+
+// --- exports exigidos pelo sistema ---
+export default getPool() // default export chamado "pool"
+export { getTokens as getBlingTokens }
 
 // Aliases exigidos pelo deploy (Vercel build)
 export { logWebhook as createWebhookLog }
