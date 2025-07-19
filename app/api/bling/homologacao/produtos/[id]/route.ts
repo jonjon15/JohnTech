@@ -1,61 +1,66 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createBlingApiResponse, handleBlingApiError, logBlingApiCall } from "@/lib/bling-error-handler"
-import { getValidAccessToken } from "@/lib/bling-auth"
-import crypto from "crypto"
-
-const USER_EMAIL = "admin@johntech.com"
-const BLING_API_URL = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+import { handleBlingApiError, createBlingApiResponse } from "@/lib/bling-error-handler"
+import { sql } from "@vercel/postgres"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const startTime = Date.now()
   const requestId = crypto.randomUUID()
 
   try {
-    console.log(`🔄 [${requestId}] GET /homologacao/produtos/${params.id} - INÍCIO`)
+    console.log(`🔄 [${requestId}] GET produto ${params.id}`)
 
-    const token = await getValidAccessToken(USER_EMAIL)
-    if (!token) {
-      return NextResponse.json(
-        handleBlingApiError(new Error("Token não encontrado"), "GET_HOMOLOGACAO_PRODUTO", requestId),
-        { status: 401 },
-      )
-    }
+    const result = await sql`
+      SELECT * FROM bling_products WHERE id = ${params.id}
+    `
 
-    const url = `${BLING_API_URL}/produtos/${params.id}`
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "x-bling-homologacao": "true",
-      },
-    })
-
-    const elapsedTime = Date.now() - startTime
-    logBlingApiCall("GET", `/produtos/${params.id}`, response.status, elapsedTime, requestId)
-
-    if (!response.ok) {
-      const errorText = await response.text()
+    if (result.rows.length === 0) {
       return NextResponse.json(
         handleBlingApiError(
-          { response: { status: response.status, data: errorText } },
-          "GET_HOMOLOGACAO_PRODUTO",
-          requestId,
+          {
+            message: "Produto não encontrado",
+            response: { status: 404 },
+          },
+          "PRODUCT_NOT_FOUND",
         ),
-        { status: response.status },
+        {
+          status: 404,
+          headers: {
+            "x-bling-homologacao": "true",
+            "x-request-id": requestId,
+          },
+        },
       )
     }
 
-    const data = await response.json()
-    console.log(`✅ [${requestId}] Produto obtido:`, params.id)
-
-    return NextResponse.json(createBlingApiResponse(data, elapsedTime, requestId))
-  } catch (error) {
     const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro:`, error)
-    return NextResponse.json(handleBlingApiError(error, "GET_HOMOLOGACAO_PRODUTO", requestId), { status: 500 })
+    console.log(`✅ [${requestId}] Produto encontrado`)
+
+    return NextResponse.json(
+      createBlingApiResponse(
+        {
+          data: result.rows[0],
+        },
+        elapsedTime,
+        requestId,
+      ),
+      {
+        headers: {
+          "x-bling-homologacao": "true",
+          "x-request-id": requestId,
+        },
+      },
+    )
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em GET produto:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "GET_HOMOLOGACAO_PRODUTO"), {
+      status: 500,
+      headers: {
+        "x-bling-homologacao": "true",
+        "x-request-id": requestId,
+      },
+    })
   }
 }
 
@@ -64,55 +69,73 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   const requestId = crypto.randomUUID()
 
   try {
-    console.log(`🔄 [${requestId}] PUT /homologacao/produtos/${params.id} - INÍCIO`)
-
-    const token = await getValidAccessToken(USER_EMAIL)
-    if (!token) {
-      return NextResponse.json(
-        handleBlingApiError(new Error("Token não encontrado"), "PUT_HOMOLOGACAO_PRODUTO", requestId),
-        { status: 401 },
-      )
-    }
+    console.log(`🔄 [${requestId}] PUT produto ${params.id}`)
 
     const body = await request.json()
-    console.log(`📦 [${requestId}] Atualizando produto:`, params.id)
+    const { nome, codigo, preco, descricao, situacao, tipo, formato } = body
 
-    const url = `${BLING_API_URL}/produtos/${params.id}`
+    // Verificar se produto existe
+    const existingResult = await sql`
+      SELECT id FROM bling_products WHERE id = ${params.id}
+    `
 
-    const response = await fetch(url, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "x-bling-homologacao": "true",
-      },
-      body: JSON.stringify(body),
-    })
-
-    const elapsedTime = Date.now() - startTime
-    logBlingApiCall("PUT", `/produtos/${params.id}`, response.status, elapsedTime, requestId)
-
-    if (!response.ok) {
-      const errorText = await response.text()
+    if (existingResult.rows.length === 0) {
       return NextResponse.json(
         handleBlingApiError(
-          { response: { status: response.status, data: errorText } },
-          "PUT_HOMOLOGACAO_PRODUTO",
-          requestId,
+          {
+            message: "Produto não encontrado",
+            response: { status: 404 },
+          },
+          "PRODUCT_NOT_FOUND",
         ),
-        { status: response.status },
+        {
+          status: 404,
+          headers: {
+            "x-bling-homologacao": "true",
+            "x-request-id": requestId,
+          },
+        },
       )
     }
 
-    const data = await response.json()
-    console.log(`✅ [${requestId}] Produto atualizado:`, params.id)
+    // Atualizar produto
+    const result = await sql`
+      UPDATE bling_products 
+      SET nome = ${nome}, codigo = ${codigo}, preco = ${preco}, descricao = ${descricao},
+          situacao = ${situacao}, tipo = ${tipo}, formato = ${formato}, updated_at = NOW()
+      WHERE id = ${params.id}
+      RETURNING *
+    `
 
-    return NextResponse.json(createBlingApiResponse(data, elapsedTime, requestId))
-  } catch (error) {
     const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro:`, error)
-    return NextResponse.json(handleBlingApiError(error, "PUT_HOMOLOGACAO_PRODUTO", requestId), { status: 500 })
+    console.log(`✅ [${requestId}] Produto atualizado`)
+
+    return NextResponse.json(
+      createBlingApiResponse(
+        {
+          data: result.rows[0],
+        },
+        elapsedTime,
+        requestId,
+      ),
+      {
+        headers: {
+          "x-bling-homologacao": "true",
+          "x-request-id": requestId,
+        },
+      },
+    )
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em PUT produto:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "PUT_HOMOLOGACAO_PRODUTO"), {
+      status: 500,
+      headers: {
+        "x-bling-homologacao": "true",
+        "x-request-id": requestId,
+      },
+    })
   }
 }
 
@@ -121,50 +144,64 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const requestId = crypto.randomUUID()
 
   try {
-    console.log(`🔄 [${requestId}] DELETE /homologacao/produtos/${params.id} - INÍCIO`)
+    console.log(`🔄 [${requestId}] DELETE produto ${params.id}`)
 
-    const token = await getValidAccessToken(USER_EMAIL)
-    if (!token) {
-      return NextResponse.json(
-        handleBlingApiError(new Error("Token não encontrado"), "DELETE_HOMOLOGACAO_PRODUTO", requestId),
-        { status: 401 },
-      )
-    }
+    // Verificar se produto existe
+    const existingResult = await sql`
+      SELECT id FROM bling_products WHERE id = ${params.id}
+    `
 
-    const url = `${BLING_API_URL}/produtos/${params.id}`
-
-    const response = await fetch(url, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "x-bling-homologacao": "true",
-      },
-    })
-
-    const elapsedTime = Date.now() - startTime
-    logBlingApiCall("DELETE", `/produtos/${params.id}`, response.status, elapsedTime, requestId)
-
-    if (!response.ok) {
-      const errorText = await response.text()
+    if (existingResult.rows.length === 0) {
       return NextResponse.json(
         handleBlingApiError(
-          { response: { status: response.status, data: errorText } },
-          "DELETE_HOMOLOGACAO_PRODUTO",
-          requestId,
+          {
+            message: "Produto não encontrado",
+            response: { status: 404 },
+          },
+          "PRODUCT_NOT_FOUND",
         ),
-        { status: response.status },
+        {
+          status: 404,
+          headers: {
+            "x-bling-homologacao": "true",
+            "x-request-id": requestId,
+          },
+        },
       )
     }
 
-    console.log(`✅ [${requestId}] Produto excluído:`, params.id)
+    // Deletar produto
+    await sql`DELETE FROM bling_products WHERE id = ${params.id}`
 
-    return NextResponse.json(createBlingApiResponse({ deleted: true }, elapsedTime, requestId))
-  } catch (error) {
     const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro:`, error)
-    return NextResponse.json(handleBlingApiError(error, "DELETE_HOMOLOGACAO_PRODUTO", requestId), { status: 500 })
+    console.log(`✅ [${requestId}] Produto deletado`)
+
+    return NextResponse.json(
+      createBlingApiResponse(
+        {
+          message: "Produto deletado com sucesso",
+        },
+        elapsedTime,
+        requestId,
+      ),
+      {
+        headers: {
+          "x-bling-homologacao": "true",
+          "x-request-id": requestId,
+        },
+      },
+    )
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em DELETE produto:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "DELETE_HOMOLOGACAO_PRODUTO"), {
+      status: 500,
+      headers: {
+        "x-bling-homologacao": "true",
+        "x-request-id": requestId,
+      },
+    })
   }
 }
 
@@ -173,54 +210,90 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const requestId = crypto.randomUUID()
 
   try {
-    console.log(`🔄 [${requestId}] PATCH /homologacao/produtos/${params.id} - INÍCIO`)
-
-    const token = await getValidAccessToken(USER_EMAIL)
-    if (!token) {
-      return NextResponse.json(
-        handleBlingApiError(new Error("Token não encontrado"), "PATCH_HOMOLOGACAO_PRODUTO", requestId),
-        { status: 401 },
-      )
-    }
+    console.log(`🔄 [${requestId}] PATCH produto ${params.id}`)
 
     const body = await request.json()
-    console.log(`📦 [${requestId}] Alterando situação:`, params.id, body)
+    const { situacao } = body
 
-    const url = `${BLING_API_URL}/produtos/${params.id}/situacoes`
-
-    const response = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "x-bling-homologacao": "true",
-      },
-      body: JSON.stringify(body),
-    })
-
-    const elapsedTime = Date.now() - startTime
-    logBlingApiCall("PATCH", `/produtos/${params.id}/situacoes`, response.status, elapsedTime, requestId)
-
-    if (!response.ok) {
-      const errorText = await response.text()
+    if (!situacao) {
       return NextResponse.json(
         handleBlingApiError(
-          { response: { status: response.status, data: errorText } },
-          "PATCH_HOMOLOGACAO_PRODUTO",
-          requestId,
+          {
+            message: "Situação é obrigatória",
+            response: { status: 400 },
+          },
+          "VALIDATION_ERROR",
         ),
-        { status: response.status },
+        {
+          status: 400,
+          headers: {
+            "x-bling-homologacao": "true",
+            "x-request-id": requestId,
+          },
+        },
       )
     }
 
-    const data = await response.json()
-    console.log(`✅ [${requestId}] Situação alterada:`, params.id)
+    // Verificar se produto existe
+    const existingResult = await sql`
+      SELECT id FROM bling_products WHERE id = ${params.id}
+    `
 
-    return NextResponse.json(createBlingApiResponse(data, elapsedTime, requestId))
-  } catch (error) {
+    if (existingResult.rows.length === 0) {
+      return NextResponse.json(
+        handleBlingApiError(
+          {
+            message: "Produto não encontrado",
+            response: { status: 404 },
+          },
+          "PRODUCT_NOT_FOUND",
+        ),
+        {
+          status: 404,
+          headers: {
+            "x-bling-homologacao": "true",
+            "x-request-id": requestId,
+          },
+        },
+      )
+    }
+
+    // Atualizar situação
+    const result = await sql`
+      UPDATE bling_products 
+      SET situacao = ${situacao}, updated_at = NOW()
+      WHERE id = ${params.id}
+      RETURNING *
+    `
+
     const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro:`, error)
-    return NextResponse.json(handleBlingApiError(error, "PATCH_HOMOLOGACAO_PRODUTO", requestId), { status: 500 })
+    console.log(`✅ [${requestId}] Situação atualizada para: ${situacao}`)
+
+    return NextResponse.json(
+      createBlingApiResponse(
+        {
+          data: result.rows[0],
+        },
+        elapsedTime,
+        requestId,
+      ),
+      {
+        headers: {
+          "x-bling-homologacao": "true",
+          "x-request-id": requestId,
+        },
+      },
+    )
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em PATCH produto:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "PATCH_HOMOLOGACAO_PRODUTO"), {
+      status: 500,
+      headers: {
+        "x-bling-homologacao": "true",
+        "x-request-id": requestId,
+      },
+    })
   }
 }

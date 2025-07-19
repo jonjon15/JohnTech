@@ -1,10 +1,10 @@
 export interface BlingApiError {
-  error: string
   message: string
+  code?: string
+  status?: number
   details?: any
   timestamp: string
-  requestId?: string
-  operation: string
+  request_id?: string
 }
 
 export interface BlingApiResponse {
@@ -12,9 +12,11 @@ export interface BlingApiResponse {
   data?: any
   error?: BlingApiError
   meta?: {
-    requestId: string
-    elapsedTime: number
-    timestamp: string
+    total?: number
+    page?: number
+    limit?: number
+    elapsed_time?: number
+    request_id?: string
   }
 }
 
@@ -23,54 +25,65 @@ export function createBlingApiResponse(data: any, elapsedTime?: number, requestI
     success: true,
     data,
     meta: {
-      requestId: requestId || crypto.randomUUID(),
-      elapsedTime: elapsedTime || 0,
+      elapsed_time: elapsedTime,
+      request_id: requestId,
       timestamp: new Date().toISOString(),
     },
   }
 }
 
-export function handleBlingApiError(error: any, operation: string, requestId?: string): BlingApiError {
-  console.error(`❌ Bling API Error (${operation}):`, error)
+export function handleBlingApiError(error: any, context = "UNKNOWN"): BlingApiResponse {
+  console.error(`❌ Bling API Error (${context}):`, error)
 
   let message = "Erro interno do servidor"
-  let details = null
+  let code = "INTERNAL_ERROR"
+  let status = 500
 
   if (error?.response?.status) {
-    switch (error.response.status) {
+    status = error.response.status
+
+    switch (status) {
       case 400:
         message = "Requisição inválida"
+        code = "BAD_REQUEST"
         break
       case 401:
         message = "Token de acesso inválido ou expirado"
+        code = "UNAUTHORIZED"
         break
       case 403:
         message = "Acesso negado"
+        code = "FORBIDDEN"
         break
       case 404:
         message = "Recurso não encontrado"
+        code = "NOT_FOUND"
         break
       case 429:
         message = "Muitas requisições - limite excedido"
+        code = "TOO_MANY_REQUESTS"
         break
       case 500:
         message = "Erro interno do servidor Bling"
+        code = "SERVER_ERROR"
         break
-      default:
-        message = `Erro HTTP ${error.response.status}`
     }
-    details = error.response.data
-  } else if (error?.message) {
+  }
+
+  if (error?.message) {
     message = error.message
   }
 
   return {
-    error: operation,
-    message,
-    details,
-    timestamp: new Date().toISOString(),
-    requestId: requestId || crypto.randomUUID(),
-    operation,
+    success: false,
+    error: {
+      message,
+      code,
+      status,
+      details: error?.response?.data || error?.details,
+      timestamp: new Date().toISOString(),
+      request_id: crypto.randomUUID(),
+    },
   }
 }
 
@@ -79,8 +92,10 @@ export function logBlingApiCall(
   endpoint: string,
   status: number,
   elapsedTime: number,
-  requestId: string,
-) {
-  const statusEmoji = status >= 200 && status < 300 ? "✅" : "❌"
-  console.log(`${statusEmoji} [${requestId}] ${method} ${endpoint} - ${status} (${elapsedTime}ms)`)
+  requestId?: string,
+): void {
+  const logLevel = status >= 400 ? "ERROR" : "INFO"
+  const emoji = status >= 400 ? "❌" : "✅"
+
+  console.log(`${emoji} [${requestId}] ${method} ${endpoint} - ${status} (${elapsedTime}ms)`)
 }

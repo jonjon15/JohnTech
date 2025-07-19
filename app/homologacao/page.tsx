@@ -1,74 +1,93 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   CheckCircle,
   XCircle,
   Clock,
-  Package,
   Plus,
   Edit,
   Trash2,
+  Play,
   RefreshCw,
   AlertTriangle,
-  Settings,
+  Database,
+  Webhook,
+  Key,
 } from "lucide-react"
 
 interface Produto {
   id: number
+  bling_id?: number
   nome: string
-  codigo?: string
-  preco?: number
-  situacao?: string
-  tipo?: string
-  formato?: string
-  descricaoCurta?: string
-  dataInclusao?: string
-  dataAlteracao?: string
+  codigo: string
+  preco: number
+  descricao: string
+  situacao: string
+  tipo: string
+  formato: string
+  created_at: string
+  updated_at: string
 }
 
 interface TestResult {
-  operation: string
+  name: string
   status: "success" | "error" | "pending"
   message: string
-  data?: any
-  elapsedTime?: number
+  details?: any
 }
 
 export default function HomologacaoPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(false)
   const [testResults, setTestResults] = useState<TestResult[]>([])
-  const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null)
+  const [isTestRunning, setIsTestRunning] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<Produto | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  // Form state
   const [formData, setFormData] = useState({
     nome: "",
     codigo: "",
     preco: "",
-    descricaoCurta: "",
+    descricao: "",
+    situacao: "Ativo",
     tipo: "P",
     formato: "S",
-    situacao: "A",
   })
 
-  // Carregar produtos
+  useEffect(() => {
+    loadProdutos()
+  }, [])
+
   const loadProdutos = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/bling/homologacao/produtos?limite=20")
-      const result = await response.json()
+      const response = await fetch("/api/bling/homologacao/produtos")
+      const data = await response.json()
 
-      if (result.success && result.data?.data) {
-        setProdutos(result.data.data)
-      } else {
-        console.error("Erro ao carregar produtos:", result)
+      if (data.success) {
+        setProdutos(data.data.data || [])
       }
     } catch (error) {
       console.error("Erro ao carregar produtos:", error)
@@ -77,227 +96,240 @@ export default function HomologacaoPage() {
     }
   }
 
-  // Executar testes de homologação
-  const runHomologationTests = async () => {
+  const runAllTests = async () => {
+    setIsTestRunning(true)
     setTestResults([])
-    const tests: TestResult[] = []
 
-    // Teste 1: Listar produtos
-    tests.push({ operation: "GET /produtos", status: "pending", message: "Testando listagem..." })
-    setTestResults([...tests])
+    const tests = [
+      { name: "Conexão com Banco", test: testDatabase },
+      { name: "Token OAuth", test: testOAuthToken },
+      { name: "Listar Produtos", test: testListProducts },
+      { name: "Criar Produto", test: testCreateProduct },
+      { name: "Atualizar Produto", test: testUpdateProduct },
+      { name: "Deletar Produto", test: testDeleteProduct },
+      { name: "Webhook Endpoint", test: testWebhookEndpoint },
+    ]
 
-    try {
-      const startTime = Date.now()
-      const response = await fetch("/api/bling/homologacao/produtos?limite=5")
-      const result = await response.json()
-      const elapsedTime = Date.now() - startTime
+    for (const { name, test } of tests) {
+      try {
+        setTestResults((prev) => [...prev, { name, status: "pending", message: "Executando..." }])
 
-      if (result.success) {
-        tests[0] = {
-          operation: "GET /produtos",
-          status: "success",
-          message: `✅ ${result.data?.data?.length || 0} produtos listados`,
-          data: result.data,
-          elapsedTime,
-        }
-      } else {
-        tests[0] = {
-          operation: "GET /produtos",
-          status: "error",
-          message: `❌ ${result.error?.message || "Erro desconhecido"}`,
-          elapsedTime,
-        }
-      }
-    } catch (error) {
-      tests[0] = {
-        operation: "GET /produtos",
-        status: "error",
-        message: `❌ Erro de conexão: ${error}`,
+        const result = await test()
+
+        setTestResults((prev) =>
+          prev.map((t) =>
+            t.name === name ? { ...t, status: "success", message: result.message, details: result.details } : t,
+          ),
+        )
+      } catch (error: any) {
+        setTestResults((prev) =>
+          prev.map((t) =>
+            t.name === name ? { ...t, status: "error", message: error.message, details: error.details } : t,
+          ),
+        )
       }
     }
 
-    setTestResults([...tests])
-
-    // Teste 2: Criar produto
-    tests.push({ operation: "POST /produtos", status: "pending", message: "Testando criação..." })
-    setTestResults([...tests])
-
-    try {
-      const startTime = Date.now()
-      const produtoTeste = {
-        nome: `Produto Teste ${Date.now()}`,
-        codigo: `TEST${Date.now()}`,
-        preco: 99.99,
-        tipo: "P",
-        formato: "S",
-        situacao: "A",
-        descricaoCurta: "Produto criado para teste de homologação",
-      }
-
-      const response = await fetch("/api/bling/homologacao/produtos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(produtoTeste),
-      })
-      const result = await response.json()
-      const elapsedTime = Date.now() - startTime
-
-      if (result.success) {
-        tests[1] = {
-          operation: "POST /produtos",
-          status: "success",
-          message: `✅ Produto criado: ID ${result.data?.data?.id}`,
-          data: result.data,
-          elapsedTime,
-        }
-
-        // Teste 3: Atualizar produto criado
-        if (result.data?.data?.id) {
-          tests.push({ operation: "PUT /produtos/{id}", status: "pending", message: "Testando atualização..." })
-          setTestResults([...tests])
-
-          try {
-            const updateStartTime = Date.now()
-            const produtoAtualizado = {
-              ...produtoTeste,
-              nome: `${produtoTeste.nome} - ATUALIZADO`,
-              preco: 149.99,
-            }
-
-            const updateResponse = await fetch(`/api/bling/homologacao/produtos/${result.data.data.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(produtoAtualizado),
-            })
-            const updateResult = await updateResponse.json()
-            const updateElapsedTime = Date.now() - updateStartTime
-
-            if (updateResult.success) {
-              tests[2] = {
-                operation: "PUT /produtos/{id}",
-                status: "success",
-                message: `✅ Produto atualizado: ID ${result.data.data.id}`,
-                data: updateResult.data,
-                elapsedTime: updateElapsedTime,
-              }
-            } else {
-              tests[2] = {
-                operation: "PUT /produtos/{id}",
-                status: "error",
-                message: `❌ ${updateResult.error?.message || "Erro na atualização"}`,
-                elapsedTime: updateElapsedTime,
-              }
-            }
-          } catch (error) {
-            tests[2] = {
-              operation: "PUT /produtos/{id}",
-              status: "error",
-              message: `❌ Erro na atualização: ${error}`,
-            }
-          }
-
-          setTestResults([...tests])
-
-          // Teste 4: Excluir produto
-          tests.push({ operation: "DELETE /produtos/{id}", status: "pending", message: "Testando exclusão..." })
-          setTestResults([...tests])
-
-          try {
-            const deleteStartTime = Date.now()
-            const deleteResponse = await fetch(`/api/bling/homologacao/produtos/${result.data.data.id}`, {
-              method: "DELETE",
-            })
-            const deleteResult = await deleteResponse.json()
-            const deleteElapsedTime = Date.now() - deleteStartTime
-
-            if (deleteResult.success) {
-              tests[3] = {
-                operation: "DELETE /produtos/{id}",
-                status: "success",
-                message: `✅ Produto excluído: ID ${result.data.data.id}`,
-                data: deleteResult.data,
-                elapsedTime: deleteElapsedTime,
-              }
-            } else {
-              tests[3] = {
-                operation: "DELETE /produtos/{id}",
-                status: "error",
-                message: `❌ ${deleteResult.error?.message || "Erro na exclusão"}`,
-                elapsedTime: deleteElapsedTime,
-              }
-            }
-          } catch (error) {
-            tests[3] = {
-              operation: "DELETE /produtos/{id}",
-              status: "error",
-              message: `❌ Erro na exclusão: ${error}`,
-            }
-          }
-        }
-      } else {
-        tests[1] = {
-          operation: "POST /produtos",
-          status: "error",
-          message: `❌ ${result.error?.message || "Erro na criação"}`,
-          elapsedTime,
-        }
-      }
-    } catch (error) {
-      tests[1] = {
-        operation: "POST /produtos",
-        status: "error",
-        message: `❌ Erro de conexão: ${error}`,
-      }
-    }
-
-    setTestResults([...tests])
+    setIsTestRunning(false)
   }
 
-  // Criar produto
-  const createProduto = async () => {
+  const testDatabase = async () => {
+    const response = await fetch("/api/db/status")
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.message || "Erro na conexão com banco")
+    }
+
+    return { message: "Conexão com banco OK", details: data }
+  }
+
+  const testOAuthToken = async () => {
+    const response = await fetch("/api/auth/bling/status")
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.message || "Token OAuth inválido")
+    }
+
+    return { message: "Token OAuth válido", details: data }
+  }
+
+  const testListProducts = async () => {
+    const response = await fetch("/api/bling/homologacao/produtos")
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.error?.message || "Erro ao listar produtos")
+    }
+
+    return {
+      message: `${data.data.data.length} produtos encontrados`,
+      details: data.data,
+    }
+  }
+
+  const testCreateProduct = async () => {
+    const testProduct = {
+      nome: `Produto Teste ${Date.now()}`,
+      codigo: `TEST-${Date.now()}`,
+      preco: 99.99,
+      descricao: "Produto criado durante teste de homologação",
+      situacao: "Ativo",
+    }
+
+    const response = await fetch("/api/bling/homologacao/produtos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(testProduct),
+    })
+
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.error?.message || "Erro ao criar produto")
+    }
+
+    return {
+      message: "Produto criado com sucesso",
+      details: data.data,
+    }
+  }
+
+  const testUpdateProduct = async () => {
+    // Usar o primeiro produto da lista para teste
+    if (produtos.length === 0) {
+      throw new Error("Nenhum produto disponível para teste")
+    }
+
+    const produto = produtos[0]
+    const updatedData = {
+      ...produto,
+      descricao: `Atualizado em ${new Date().toISOString()}`,
+    }
+
+    const response = await fetch(`/api/bling/homologacao/produtos/${produto.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatedData),
+    })
+
+    const data = await response.json()
+
+    if (!data.success) {
+      throw new Error(data.error?.message || "Erro ao atualizar produto")
+    }
+
+    return {
+      message: "Produto atualizado com sucesso",
+      details: data.data,
+    }
+  }
+
+  const testDeleteProduct = async () => {
+    // Criar um produto temporário para deletar
+    const tempProduct = {
+      nome: `Produto Temp ${Date.now()}`,
+      codigo: `TEMP-${Date.now()}`,
+      preco: 1.0,
+      descricao: "Produto temporário para teste de deleção",
+    }
+
+    const createResponse = await fetch("/api/bling/homologacao/produtos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tempProduct),
+    })
+
+    const createData = await createResponse.json()
+
+    if (!createData.success) {
+      throw new Error("Erro ao criar produto temporário")
+    }
+
+    const deleteResponse = await fetch(`/api/bling/homologacao/produtos/${createData.data.data.id}`, {
+      method: "DELETE",
+    })
+
+    const deleteData = await deleteResponse.json()
+
+    if (!deleteData.success) {
+      throw new Error(deleteData.error?.message || "Erro ao deletar produto")
+    }
+
+    return {
+      message: "Produto deletado com sucesso",
+      details: deleteData.data,
+    }
+  }
+
+  const testWebhookEndpoint = async () => {
+    const response = await fetch("/api/bling/webhooks")
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error("Endpoint de webhook não está funcionando")
+    }
+
+    return {
+      message: "Endpoint de webhook ativo",
+      details: data,
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setLoading(true)
+
     try {
-      const response = await fetch("/api/bling/homologacao/produtos", {
-        method: "POST",
+      const url = editingProduct
+        ? `/api/bling/homologacao/produtos/${editingProduct.id}`
+        : "/api/bling/homologacao/produtos"
+
+      const method = editingProduct ? "PUT" : "POST"
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nome: formData.nome,
-          codigo: formData.codigo,
+          ...formData,
           preco: Number.parseFloat(formData.preco) || 0,
-          descricaoCurta: formData.descricaoCurta,
-          tipo: formData.tipo,
-          formato: formData.formato,
-          situacao: formData.situacao,
         }),
       })
 
-      const result = await response.json()
+      const data = await response.json()
 
-      if (result.success) {
-        alert("Produto criado com sucesso!")
-        setFormData({
-          nome: "",
-          codigo: "",
-          preco: "",
-          descricaoCurta: "",
-          tipo: "P",
-          formato: "S",
-          situacao: "A",
-        })
-        loadProdutos()
+      if (data.success) {
+        await loadProdutos()
+        setIsDialogOpen(false)
+        resetForm()
       } else {
-        alert(`Erro: ${result.error?.message}`)
+        alert(data.error?.message || "Erro ao salvar produto")
       }
     } catch (error) {
-      alert(`Erro: ${error}`)
+      console.error("Erro:", error)
+      alert("Erro ao salvar produto")
     } finally {
       setLoading(false)
     }
   }
 
-  // Excluir produto
-  const deleteProduto = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir este produto?")) return
+  const handleEdit = (produto: Produto) => {
+    setEditingProduct(produto)
+    setFormData({
+      nome: produto.nome,
+      codigo: produto.codigo,
+      preco: produto.preco.toString(),
+      descricao: produto.descricao,
+      situacao: produto.situacao,
+      tipo: produto.tipo,
+      formato: produto.formato,
+    })
+    setIsDialogOpen(true)
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Tem certeza que deseja deletar este produto?")) return
 
     setLoading(true)
     try {
@@ -305,48 +337,44 @@ export default function HomologacaoPage() {
         method: "DELETE",
       })
 
-      const result = await response.json()
+      const data = await response.json()
 
-      if (result.success) {
-        alert("Produto excluído com sucesso!")
-        loadProdutos()
+      if (data.success) {
+        await loadProdutos()
       } else {
-        alert(`Erro: ${result.error?.message}`)
+        alert(data.error?.message || "Erro ao deletar produto")
       }
     } catch (error) {
-      alert(`Erro: ${error}`)
+      console.error("Erro:", error)
+      alert("Erro ao deletar produto")
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadProdutos()
-  }, [])
+  const resetForm = () => {
+    setFormData({
+      nome: "",
+      codigo: "",
+      preco: "",
+      descricao: "",
+      situacao: "Ativo",
+      tipo: "P",
+      formato: "S",
+    })
+    setEditingProduct(null)
+  }
 
-  const getStatusBadge = (status: "success" | "error" | "pending") => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case "success":
-        return (
-          <Badge className="bg-green-100 text-green-800">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Sucesso
-          </Badge>
-        )
+        return <CheckCircle className="h-4 w-4 text-green-500" />
       case "error":
-        return (
-          <Badge className="bg-red-100 text-red-800">
-            <XCircle className="w-3 h-3 mr-1" />
-            Erro
-          </Badge>
-        )
+        return <XCircle className="h-4 w-4 text-red-500" />
       case "pending":
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800">
-            <Clock className="w-3 h-3 mr-1" />
-            Executando
-          </Badge>
-        )
+        return <Clock className="h-4 w-4 text-yellow-500" />
+      default:
+        return <AlertTriangle className="h-4 w-4 text-gray-500" />
     }
   }
 
@@ -357,56 +385,66 @@ export default function HomologacaoPage() {
           <h1 className="text-3xl font-bold">Homologação Bling API</h1>
           <p className="text-muted-foreground">Testes e validação da integração com a API do Bling</p>
         </div>
-        <Button onClick={loadProdutos} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
+        <Badge variant="outline" className="text-lg px-4 py-2">
+          <Database className="h-4 w-4 mr-2" />
+          Ambiente de Homologação
+        </Badge>
       </div>
 
-      <Alert>
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>
-          Esta página executa testes de homologação conforme a documentação oficial do Bling. Todos os testes incluem os
-          headers necessários como <code>x-bling-homologacao: true</code>.
-        </AlertDescription>
-      </Alert>
-
-      <Tabs defaultValue="tests" className="space-y-4">
-        <TabsList>
+      <Tabs defaultValue="tests" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="tests">Testes Automatizados</TabsTrigger>
           <TabsTrigger value="products">Gerenciar Produtos</TabsTrigger>
-          <TabsTrigger value="create">Criar Produto</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="tests" className="space-y-4">
+        <TabsContent value="tests" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Settings className="w-5 h-5 mr-2" />
+              <CardTitle className="flex items-center gap-2">
+                <Play className="h-5 w-5" />
                 Testes de Homologação
               </CardTitle>
-              <CardDescription>Executa todos os testes necessários para validação da API</CardDescription>
+              <CardDescription>
+                Execute todos os testes necessários para validar a integração com o Bling
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button onClick={runHomologationTests} disabled={loading}>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Executar Testes
+              <Button onClick={runAllTests} disabled={isTestRunning} className="w-full">
+                {isTestRunning ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Executando Testes...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Executar Todos os Testes
+                  </>
+                )}
               </Button>
 
               {testResults.length > 0 && (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <h3 className="font-semibold">Resultados dos Testes:</h3>
-                  {testResults.map((test, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        {getStatusBadge(test.status)}
-                        <span className="font-mono text-sm">{test.operation}</span>
+                  {testResults.map((result, index) => (
+                    <Alert
+                      key={index}
+                      className={
+                        result.status === "success"
+                          ? "border-green-200 bg-green-50"
+                          : result.status === "error"
+                            ? "border-red-200 bg-red-50"
+                            : "border-yellow-200 bg-yellow-50"
+                      }
+                    >
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(result.status)}
+                        <AlertDescription>
+                          <strong>{result.name}:</strong> {result.message}
+                        </AlertDescription>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm">{test.message}</div>
-                        {test.elapsedTime && <div className="text-xs text-muted-foreground">{test.elapsedTime}ms</div>}
-                      </div>
-                    </div>
+                    </Alert>
                   ))}
                 </div>
               )}
@@ -414,125 +452,193 @@ export default function HomologacaoPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="products" className="space-y-4">
+        <TabsContent value="products" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Package className="w-5 h-5 mr-2" />
-                Produtos ({produtos.length})
-              </CardTitle>
-              <CardDescription>Lista de produtos obtidos da API do Bling</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-8">
-                  <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
-                  <p>Carregando produtos...</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Produtos de Homologação</CardTitle>
+                  <CardDescription>Gerencie produtos para testes da API</CardDescription>
                 </div>
-              ) : produtos.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhum produto encontrado</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {produtos.map((produto) => (
-                    <div key={produto.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <h3 className="font-semibold">{produto.nome}</h3>
-                        <div className="text-sm text-muted-foreground space-x-4">
-                          <span>ID: {produto.id}</span>
-                          {produto.codigo && <span>Código: {produto.codigo}</span>}
-                          {produto.preco && <span>Preço: R$ {produto.preco}</span>}
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={resetForm}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Novo Produto
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
+                      <DialogDescription>Preencha os dados do produto para homologação</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="nome">Nome *</Label>
+                          <Input
+                            id="nome"
+                            value={formData.nome}
+                            onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="codigo">Código *</Label>
+                          <Input
+                            id="codigo"
+                            value={formData.codigo}
+                            onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                            required
+                          />
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        {produto.situacao && (
-                          <Badge variant={produto.situacao === "A" ? "default" : "secondary"}>
-                            {produto.situacao === "A" ? "Ativo" : "Inativo"}
-                          </Badge>
-                        )}
-                        <Button size="sm" variant="outline" onClick={() => setSelectedProduto(produto)}>
-                          <Edit className="w-3 h-3" />
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="preco">Preço</Label>
+                          <Input
+                            id="preco"
+                            type="number"
+                            step="0.01"
+                            value={formData.preco}
+                            onChange={(e) => setFormData({ ...formData, preco: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="situacao">Situação</Label>
+                          <Select
+                            value={formData.situacao}
+                            onValueChange={(value) => setFormData({ ...formData, situacao: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Ativo">Ativo</SelectItem>
+                              <SelectItem value="Inativo">Inativo</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="tipo">Tipo</Label>
+                          <Select
+                            value={formData.tipo}
+                            onValueChange={(value) => setFormData({ ...formData, tipo: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="P">Produto</SelectItem>
+                              <SelectItem value="S">Serviço</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="descricao">Descrição</Label>
+                        <Textarea
+                          id="descricao"
+                          value={formData.descricao}
+                          onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                          rows={3}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="submit" disabled={loading}>
+                          {loading ? "Salvando..." : "Salvar"}
                         </Button>
-                        <Button size="sm" variant="destructive" onClick={() => deleteProduto(produto.id)}>
-                          <Trash2 className="w-3 h-3" />
+                        <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                          Cancelar
                         </Button>
                       </div>
-                    </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 mb-4">
+                <Button variant="outline" size="sm" onClick={loadProdutos} disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                  Atualizar
+                </Button>
+                <Badge variant="secondary">{produtos.length} produtos</Badge>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Preço</TableHead>
+                    <TableHead>Situação</TableHead>
+                    <TableHead>Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {produtos.map((produto) => (
+                    <TableRow key={produto.id}>
+                      <TableCell>{produto.id}</TableCell>
+                      <TableCell>{produto.nome}</TableCell>
+                      <TableCell>{produto.codigo}</TableCell>
+                      <TableCell>R$ {produto.preco.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Badge variant={produto.situacao === "Ativo" ? "default" : "secondary"}>
+                          {produto.situacao}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleEdit(produto)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleDelete(produto.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </div>
-              )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="create" className="space-y-4">
+        <TabsContent value="webhooks" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Plus className="w-5 h-5 mr-2" />
-                Criar Novo Produto
+              <CardTitle className="flex items-center gap-2">
+                <Webhook className="h-5 w-5" />
+                Configuração de Webhooks
               </CardTitle>
-              <CardDescription>Formulário para criar produtos via API do Bling</CardDescription>
+              <CardDescription>Configure e teste os webhooks do Bling</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="nome">Nome *</Label>
-                  <Input
-                    id="nome"
-                    value={formData.nome}
-                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                    placeholder="Nome do produto"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="codigo">Código</Label>
-                  <Input
-                    id="codigo"
-                    value={formData.codigo}
-                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                    placeholder="Código do produto"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="preco">Preço</Label>
-                  <Input
-                    id="preco"
-                    type="number"
-                    step="0.01"
-                    value={formData.preco}
-                    onChange={(e) => setFormData({ ...formData, preco: e.target.value })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tipo">Tipo</Label>
-                  <select
-                    id="tipo"
-                    className="w-full p-2 border rounded-md"
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  >
-                    <option value="P">Produto</option>
-                    <option value="S">Serviço</option>
-                  </select>
-                </div>
-              </div>
+              <Alert>
+                <Key className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>URL do Webhook:</strong> {process.env.NEXT_PUBLIC_BASE_URL}/api/bling/webhooks
+                </AlertDescription>
+              </Alert>
+
               <div className="space-y-2">
-                <Label htmlFor="descricao">Descrição Curta</Label>
-                <Textarea
-                  id="descricao"
-                  value={formData.descricaoCurta}
-                  onChange={(e) => setFormData({ ...formData, descricaoCurta: e.target.value })}
-                  placeholder="Descrição do produto"
-                  rows={3}
-                />
+                <h3 className="font-semibold">Eventos Suportados:</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Badge variant="outline">produto.criado</Badge>
+                  <Badge variant="outline">produto.atualizado</Badge>
+                  <Badge variant="outline">produto.excluido</Badge>
+                  <Badge variant="outline">pedido.criado</Badge>
+                  <Badge variant="outline">pedido.atualizado</Badge>
+                  <Badge variant="outline">estoque.atualizado</Badge>
+                </div>
               </div>
-              <Button onClick={createProduto} disabled={loading || !formData.nome}>
-                <Plus className="w-4 h-4 mr-2" />
-                {loading ? "Criando..." : "Criar Produto"}
+
+              <Button variant="outline" className="w-full bg-transparent">
+                <Webhook className="h-4 w-4 mr-2" />
+                Testar Webhook
               </Button>
             </CardContent>
           </Card>
