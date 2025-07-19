@@ -1,125 +1,89 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { saveWebhookLog } from "@/lib/db"
-import crypto from "crypto"
+import { createWebhookLog } from "@/lib/db"
+
+export async function GET() {
+  return NextResponse.json({
+    success: true,
+    message: "Webhook endpoint ativo",
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      webhook: "/api/bling/webhooks",
+      status: "/api/bling/webhooks/status",
+    },
+  })
+}
 
 export async function POST(request: NextRequest) {
-  const startTime = Date.now()
-  const requestId = crypto.randomUUID()
+  const requestId = Math.random().toString(36).substring(7)
 
   try {
-    console.log(`🔄 [${requestId}] Webhook recebido`)
+    console.log(`[${requestId}] Webhook recebido`)
 
-    const body = await request.text()
-    const signature = request.headers.get("x-bling-signature")
-    const eventType = request.headers.get("x-bling-event")
+    // Verificar se há um secret no header (opcional)
+    const webhookSecret = request.headers.get("x-bling-webhook-secret")
+    const expectedSecret = process.env.BLING_WEBHOOK_SECRET
 
-    console.log(`📋 [${requestId}] Event Type: ${eventType}`)
-    console.log(`🔐 [${requestId}] Signature: ${signature}`)
-
-    // Validar assinatura do webhook
-    const webhookSecret = process.env.BLING_WEBHOOK_SECRET
-    if (webhookSecret && signature) {
-      const expectedSignature = crypto.createHmac("sha256", webhookSecret).update(body).digest("hex")
-
-      if (signature !== `sha256=${expectedSignature}`) {
-        console.error(`❌ [${requestId}] Assinatura inválida`)
-        return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
-      }
+    if (expectedSecret && webhookSecret !== expectedSecret) {
+      console.warn(`[${requestId}] Webhook secret inválido`)
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid webhook secret",
+        },
+        { status: 401 },
+      )
     }
 
-    let payload
-    try {
-      payload = JSON.parse(body)
-    } catch (error) {
-      console.error(`❌ [${requestId}] JSON inválido:`, error)
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
-    }
+    const payload = await request.json()
+    const eventType = payload.event || "unknown"
+    const resourceId = payload.data?.id || null
 
-    console.log(`📦 [${requestId}] Payload:`, payload)
+    console.log(`[${requestId}] Evento: ${eventType}, Resource: ${resourceId}`)
 
     // Salvar log do webhook
-    const resourceId = payload?.data?.id?.toString() || null
-    await saveWebhookLog(eventType || "unknown", resourceId, payload, "received")
+    await createWebhookLog(eventType, payload, resourceId)
 
-    // Processar webhook baseado no tipo de evento
-    let processedData = null
+    // Processar diferentes tipos de eventos
     switch (eventType) {
       case "produto.criado":
       case "produto.atualizado":
       case "produto.excluido":
-        processedData = await processProductWebhook(payload, eventType)
+        console.log(`[${requestId}] Processando evento de produto: ${eventType}`)
+        // Aqui você pode adicionar lógica específica para produtos
         break
+
       case "pedido.criado":
       case "pedido.atualizado":
-        processedData = await processOrderWebhook(payload, eventType)
+        console.log(`[${requestId}] Processando evento de pedido: ${eventType}`)
+        // Aqui você pode adicionar lógica específica para pedidos
         break
-      case "estoque.atualizado":
-        processedData = await processStockWebhook(payload, eventType)
-        break
-      default:
-        console.log(`⚠️ [${requestId}] Tipo de evento não processado: ${eventType}`)
-    }
 
-    const elapsedTime = Date.now() - startTime
-    console.log(`✅ [${requestId}] Webhook processado em ${elapsedTime}ms`)
+      case "estoque.atualizado":
+        console.log(`[${requestId}] Processando evento de estoque: ${eventType}`)
+        // Aqui você pode adicionar lógica específica para estoque
+        break
+
+      default:
+        console.log(`[${requestId}] Evento não reconhecido: ${eventType}`)
+    }
 
     return NextResponse.json({
       success: true,
       message: "Webhook processado com sucesso",
-      event_type: eventType,
-      processed_data: processedData,
-      elapsed_time: elapsedTime,
-      request_id: requestId,
+      eventType,
+      resourceId,
       timestamp: new Date().toISOString(),
     })
   } catch (error: any) {
-    const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro no webhook:`, error)
+    console.error(`[${requestId}] Erro ao processar webhook:`, error)
 
     return NextResponse.json(
       {
         success: false,
-        message: "Erro ao processar webhook",
-        error: error.message,
-        elapsed_time: elapsedTime,
-        request_id: requestId,
-        timestamp: new Date().toISOString(),
+        error: "Erro interno do servidor",
+        details: error.message,
       },
       { status: 500 },
     )
   }
-}
-
-async function processProductWebhook(payload: any, eventType: string) {
-  console.log(`🛍️ Processando webhook de produto: ${eventType}`)
-  // Implementar lógica específica para produtos
-  return { type: "product", action: eventType, data: payload.data }
-}
-
-async function processOrderWebhook(payload: any, eventType: string) {
-  console.log(`📦 Processando webhook de pedido: ${eventType}`)
-  // Implementar lógica específica para pedidos
-  return { type: "order", action: eventType, data: payload.data }
-}
-
-async function processStockWebhook(payload: any, eventType: string) {
-  console.log(`📊 Processando webhook de estoque: ${eventType}`)
-  // Implementar lógica específica para estoque
-  return { type: "stock", action: eventType, data: payload.data }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    message: "Webhook endpoint ativo",
-    methods: ["POST"],
-    events: [
-      "produto.criado",
-      "produto.atualizado",
-      "produto.excluido",
-      "pedido.criado",
-      "pedido.atualizado",
-      "estoque.atualizado",
-    ],
-    timestamp: new Date().toISOString(),
-  })
 }
