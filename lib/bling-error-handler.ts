@@ -1,89 +1,73 @@
 export interface BlingApiError {
+  error: string
   message: string
-  code?: string
-  status?: number
   details?: any
   timestamp: string
   request_id?: string
+  elapsed_time?: number
 }
 
 export interface BlingApiResponse {
   success: boolean
   data?: any
-  error?: BlingApiError
-  meta?: {
-    total?: number
-    page?: number
-    limit?: number
-    elapsed_time?: number
-    request_id?: string
-  }
+  error?: string
+  message?: string
+  timestamp: string
+  request_id?: string
+  elapsed_time?: number
 }
 
 export function createBlingApiResponse(data: any, elapsedTime?: number, requestId?: string): BlingApiResponse {
   return {
     success: true,
     data,
-    meta: {
-      elapsed_time: elapsedTime,
-      request_id: requestId,
-      timestamp: new Date().toISOString(),
-    },
+    timestamp: new Date().toISOString(),
+    request_id: requestId,
+    elapsed_time: elapsedTime,
   }
 }
 
-export function handleBlingApiError(error: any, context = "UNKNOWN"): BlingApiResponse {
-  console.error(`❌ Bling API Error (${context}):`, error)
+export function handleBlingApiError(error: any, operation: string): BlingApiError {
+  console.error(`❌ Bling API Error (${operation}):`, error)
 
   let message = "Erro interno do servidor"
-  let code = "INTERNAL_ERROR"
-  let status = 500
+  let details = null
 
-  if (error?.response?.status) {
-    status = error.response.status
+  if (error?.response) {
+    // Erro HTTP da API do Bling
+    const status = error.response.status
+    const data = error.response.data
 
     switch (status) {
-      case 400:
-        message = "Requisição inválida"
-        code = "BAD_REQUEST"
-        break
       case 401:
         message = "Token de acesso inválido ou expirado"
-        code = "UNAUTHORIZED"
         break
       case 403:
-        message = "Acesso negado"
-        code = "FORBIDDEN"
+        message = "Acesso negado - verifique as permissões"
         break
       case 404:
         message = "Recurso não encontrado"
-        code = "NOT_FOUND"
         break
       case 429:
-        message = "Muitas requisições - limite excedido"
-        code = "TOO_MANY_REQUESTS"
+        message = "Limite de requisições excedido"
         break
       case 500:
         message = "Erro interno do servidor Bling"
-        code = "SERVER_ERROR"
         break
+      default:
+        message = `Erro HTTP ${status}`
     }
-  }
 
-  if (error?.message) {
+    details = data
+  } else if (error?.message) {
     message = error.message
   }
 
   return {
-    success: false,
-    error: {
-      message,
-      code,
-      status,
-      details: error?.response?.data || error?.details,
-      timestamp: new Date().toISOString(),
-      request_id: crypto.randomUUID(),
-    },
+    error: operation,
+    message,
+    details,
+    timestamp: new Date().toISOString(),
   }
 }
 
@@ -93,9 +77,9 @@ export function logBlingApiCall(
   status: number,
   elapsedTime: number,
   requestId?: string,
-): void {
-  const logLevel = status >= 400 ? "ERROR" : "INFO"
-  const emoji = status >= 400 ? "❌" : "✅"
+) {
+  const logLevel = status >= 400 ? "ERROR" : status >= 300 ? "WARN" : "INFO"
+  const emoji = status >= 400 ? "❌" : status >= 300 ? "⚠️" : "✅"
 
   console.log(`${emoji} [${requestId}] ${method} ${endpoint} - ${status} (${elapsedTime}ms)`)
 }

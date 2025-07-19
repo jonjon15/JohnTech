@@ -35,7 +35,7 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
     `
 
     if (result.rows.length === 0) {
-      console.log("❌ Nenhum token encontrado")
+      console.log("❌ Nenhum token encontrado no banco")
       return null
     }
 
