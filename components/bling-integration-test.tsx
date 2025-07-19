@@ -23,6 +23,10 @@ interface TestSuite {
   api: TestResult
   products: TestResult
   homologation: TestResult
+  // Novas simulações de erro
+  simulatedAuthError: TestResult
+  simulatedRateLimitError: TestResult
+  simulatedInternalServerError: TestResult
 }
 
 export default function BlingIntegrationTest() {
@@ -34,6 +38,10 @@ export default function BlingIntegrationTest() {
     api: { name: "API Bling", status: "pending" },
     products: { name: "Produtos", status: "pending" },
     homologation: { name: "Homologação", status: "pending" },
+    // Inicializa os novos testes simulados
+    simulatedAuthError: { name: "Simulação: Auth Inválida", status: "pending" },
+    simulatedRateLimitError: { name: "Simulação: Rate Limit", status: "pending" },
+    simulatedInternalServerError: { name: "Simulação: Erro Interno", status: "pending" },
   })
   const { toast } = useToast()
 
@@ -171,16 +179,70 @@ export default function BlingIntegrationTest() {
     }
   }
 
+  // --- Novas Funções de Teste Simulado ---
+  const simulateAuthError = async () => {
+    // Simula um erro 401 Unauthorized (Token inválido) da API Bling
+    await new Promise((resolve) => setTimeout(resolve, 300)) // Simula atraso de rede
+    return {
+      success: false,
+      message: "Token Bling inválido ou expirado (simulado)",
+      details: {
+        error: {
+          code: "40101", // Código de erro Bling para token inválido
+          message: "Token de acesso inválido ou expirado.",
+          statusCode: 401,
+        },
+      },
+    }
+  }
+
+  const simulateRateLimitError = async () => {
+    // Simula um erro 429 Too Many Requests (Limite de requisições excedido) da API Bling
+    await new Promise((resolve) => setTimeout(resolve, 300)) // Simula atraso de rede
+    return {
+      success: false,
+      message: "Limite de requisições excedido (simulado)",
+      details: {
+        error: {
+          code: "42901", // Código de erro Bling para limite de requisições
+          message: "Limite de requisições excedido. Tente novamente mais tarde.",
+          statusCode: 429,
+        },
+      },
+    }
+  }
+
+  const simulateInternalServerError = async () => {
+    // Simula um erro 500 Internal Server Error (Erro interno do servidor) da API Bling
+    await new Promise((resolve) => setTimeout(resolve, 300)) // Simula atraso de rede
+    return {
+      success: false,
+      message: "Erro interno do servidor Bling (simulado)",
+      details: {
+        error: {
+          code: "50001", // Código de erro Bling para erro interno
+          message: "Ocorreu um erro interno no servidor Bling.",
+          statusCode: 500,
+        },
+      },
+    }
+  }
+  // --- Fim das Novas Funções de Teste Simulado ---
+
   const runAllTests = async () => {
     setRunning(true)
     setProgress(0)
 
     const tests = [
-      { key: "auth" as const, fn: testAuth, weight: 20 },
-      { key: "database" as const, fn: testDatabase, weight: 20 },
-      { key: "api" as const, fn: testApi, weight: 20 },
-      { key: "products" as const, fn: testProducts, weight: 20 },
-      { key: "homologation" as const, fn: testHomologation, weight: 20 },
+      { key: "auth" as const, fn: testAuth, weight: 12.5 },
+      { key: "database" as const, fn: testDatabase, weight: 12.5 },
+      { key: "api" as const, fn: testApi, weight: 12.5 },
+      { key: "products" as const, fn: testProducts, weight: 12.5 },
+      { key: "homologation" as const, fn: testHomologation, weight: 12.5 },
+      // Adiciona os novos testes simulados
+      { key: "simulatedAuthError" as const, fn: simulateAuthError, weight: 12.5 },
+      { key: "simulatedRateLimitError" as const, fn: simulateRateLimitError, weight: 12.5 },
+      { key: "simulatedInternalServerError" as const, fn: simulateInternalServerError, weight: 12.5 },
     ]
 
     let currentProgress = 0

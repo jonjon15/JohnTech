@@ -17,8 +17,8 @@ export async function saveTokens(userEmail: string, tokenData: BlingTokenData): 
       `
       INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at, created_at, updated_at)
       VALUES ($1, $2, $3, $4, NOW(), NOW())
-      ON CONFLICT (user_email) 
-      DO UPDATE SET 
+      ON CONFLICT (user_email)
+      DO UPDATE SET
         access_token = EXCLUDED.access_token,
         refresh_token = EXCLUDED.refresh_token,
         expires_at = EXCLUDED.expires_at,

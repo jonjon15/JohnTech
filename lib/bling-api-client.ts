@@ -1,6 +1,6 @@
-import { getTokens } from "@/lib/db"
 import type { BlingProduct, CreateProductRequest, UpdateProductRequest } from "@/types/bling"
 import type { BlingErrorResponse } from "@/lib/bling-error-handler"
+import { getValidAccessToken } from "@/lib/bling-auth"
 
 const BLING_API_BASE_URL = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
 const USER_EMAIL = process.env.BLING_USER_EMAIL || "default_user@example.com" // Usar um email padrão ou de configuração
@@ -12,15 +12,11 @@ interface BlingApiResponse<T> {
 
 // Função para obter um cliente Bling API com token de acesso válido
 export async function getBlingApiClient() {
-  const tokens = await getTokens(USER_EMAIL)
+  const accessToken = await getValidAccessToken(USER_EMAIL)
 
-  if (!tokens || new Date() > new Date(tokens.expires_at)) {
-    // Aqui você precisaria de uma lógica para refrescar o token
-    // Por simplicidade, vamos lançar um erro ou redirecionar para reautenticação
-    throw new Error("Token Bling expirado ou não encontrado. Por favor, reautentique.")
+  if (!accessToken) {
+    throw new Error("Não foi possível obter um token de acesso Bling válido. Por favor, reautentique.")
   }
-
-  const accessToken = tokens.access_token
 
   const makeRequest = async (method: string, path: string, body?: any): Promise<BlingApiResponse<any>> => {
     const url = `${BLING_API_BASE_URL}${path}`

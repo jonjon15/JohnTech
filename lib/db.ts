@@ -2,11 +2,11 @@ import { Pool } from "pg"
 
 // Configuração do Pool de Conexões com o Vercel Postgres
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL, // <-- Aqui a variável é utilizada
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: 20, // Aumenta o número máximo de clientes ociosos no pool
-  idleTimeoutMillis: 30000, // Tempo em milissegundos para um cliente ocioso ser removido do pool
-  connectionTimeoutMillis: 2000, // Tempo em milissegundos para uma nova conexão ser estabelecida
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 })
 
 // Interfaces
@@ -180,7 +180,7 @@ export async function updateProduct(id: number, product: Partial<Product>): Prom
     values.push(id)
 
     const query = `
-      UPDATE bling_products 
+      UPDATE bling_products
       SET ${fields.join(", ")}
       WHERE id = $${paramCount}
       RETURNING *
@@ -298,8 +298,8 @@ export async function getWebhookLogs(limit = 50): Promise<WebhookLog[]> {
   try {
     const result = await pool.query(
       `
-      SELECT * FROM webhook_logs 
-      ORDER BY created_at DESC 
+      SELECT * FROM webhook_logs
+      ORDER BY created_at DESC
       LIMIT $1
     `,
       [limit],
