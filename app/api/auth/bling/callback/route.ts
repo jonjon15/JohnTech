@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 // import { getUserInfo } from "@/lib/userInfo" // Declare the getUserInfo variable
 // import { getUserInfo } from "@/lib/userInfo" // Use this if your tsconfig.json has a "paths" alias for "@"
-import { getUserInfo } from "../../../lib/userInfo"
+// import { getUserInfo } from "@/lib/userInfo" // Use this if your tsconfig.json has a "paths" alias for "@"
+import { getUserInfo } from "@/lib/userInfo"
 
 const CLIENT_ID = process.env.CLIENT_ID!
 const CLIENT_SECRET = process.env.CLIENT_SECRET!

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Salvar token no banco
     const userEmail = "admin@example.com" // Em produção, pegar do usuário logado
-    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
 
     await sql`
       INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at, created_at, updated_at)
