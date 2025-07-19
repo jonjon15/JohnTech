@@ -3,57 +3,105 @@ import { sql } from "@vercel/postgres"
 
 export async function GET() {
   try {
-    // Testar conexão básica
-    const timeResult = await sql`SELECT NOW() as current_time`
+    console.log("=== VERIFICANDO STATUS DO BANCO ===")
 
-    // Verificar se a tabela bling_tokens existe
-    const tableCheck = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'bling_tokens'
-      ) as table_exists
-    `
-
-    // Se a tabela não existir, criar
-    if (!tableCheck.rows[0].table_exists) {
-      console.log("Tabela bling_tokens não existe. Criando...")
-
-      await sql`
-        CREATE TABLE bling_tokens (
-          id SERIAL PRIMARY KEY,
-          user_email VARCHAR(255) UNIQUE NOT NULL,
-          access_token TEXT NOT NULL,
-          refresh_token TEXT,
-          expires_at TIMESTAMP NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `
-
-      await sql`CREATE INDEX IF NOT EXISTS idx_bling_tokens_user_email ON bling_tokens(user_email)`
-      await sql`CREATE INDEX IF NOT EXISTS idx_bling_tokens_expires_at ON bling_tokens(expires_at)`
-
-      console.log("Tabela bling_tokens criada com sucesso")
+    const status = {
+      timestamp: new Date().toISOString(),
+      database: {
+        connected: false,
+        version: null,
+        tables: [],
+        error: null,
+      },
+      tables_info: {
+        bling_tokens: {
+          exists: false,
+          count: 0,
+          structure: null,
+        },
+        bling_webhook_logs: {
+          exists: false,
+          count: 0,
+          structure: null,
+        },
+      },
     }
 
-    // Contar registros na tabela
-    const countResult = await sql`SELECT COUNT(*) as count FROM bling_tokens`
+    // Testar conexão básica
+    try {
+      const versionResult = await sql`SELECT version() as version`
+      status.database.connected = true
+      status.database.version = versionResult.rows[0].version
+    } catch (error) {
+      status.database.error = (error as Error).message
+      return NextResponse.json(status, { status: 500 })
+    }
 
-    return NextResponse.json({
-      success: true,
-      database: "connected",
-      current_time: timeResult.rows[0].current_time,
-      bling_tokens_table: "exists",
-      tokens_count: countResult.rows[0].count,
-    })
+    // Verificar tabelas existentes
+    try {
+      const tablesResult = await sql`
+        SELECT table_name, table_type 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('bling_tokens', 'bling_webhook_logs')
+        ORDER BY table_name
+      `
+
+      status.database.tables = tablesResult.rows.map((row) => ({
+        name: row.table_name,
+        type: row.table_type,
+      }))
+
+      // Verificar tabela bling_tokens
+      try {
+        const tokenCount = await sql`SELECT COUNT(*) as count FROM bling_tokens`
+        const tokenStructure = await sql`
+          SELECT column_name, data_type, is_nullable 
+          FROM information_schema.columns 
+          WHERE table_name = 'bling_tokens' 
+          ORDER BY ordinal_position
+        `
+
+        status.tables_info.bling_tokens.exists = true
+        status.tables_info.bling_tokens.count = Number.parseInt(tokenCount.rows[0].count)
+        status.tables_info.bling_tokens.structure = tokenStructure.rows
+      } catch (error) {
+        console.log("Tabela bling_tokens não existe ou erro:", (error as Error).message)
+      }
+
+      // Verificar tabela bling_webhook_logs
+      try {
+        const webhookCount = await sql`SELECT COUNT(*) as count FROM bling_webhook_logs`
+        const webhookStructure = await sql`
+          SELECT column_name, data_type, is_nullable 
+          FROM information_schema.columns 
+          WHERE table_name = 'bling_webhook_logs' 
+          ORDER BY ordinal_position
+        `
+
+        status.tables_info.bling_webhook_logs.exists = true
+        status.tables_info.bling_webhook_logs.count = Number.parseInt(webhookCount.rows[0].count)
+        status.tables_info.bling_webhook_logs.structure = webhookStructure.rows
+      } catch (error) {
+        console.log("Tabela bling_webhook_logs não existe ou erro:", (error as Error).message)
+      }
+    } catch (error) {
+      console.error("Erro ao verificar tabelas:", error)
+      status.database.error = (error as Error).message
+    }
+
+    console.log("Status do banco:", status)
+
+    return NextResponse.json(status)
   } catch (error: any) {
-    console.error("Erro ao verificar status do banco:", error)
+    console.error("=== ERRO NO STATUS DO BANCO ===")
+    console.error("Erro:", error)
+
     return NextResponse.json(
       {
-        success: false,
-        error: "Database connection failed",
+        error: "Erro ao verificar status do banco",
         message: error.message,
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )

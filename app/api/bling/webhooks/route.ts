@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { sql } from "@vercel/postgres"
 import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
@@ -8,16 +9,17 @@ export async function POST(request: NextRequest) {
     const body = await request.text()
     const signature = request.headers.get("x-bling-signature")
 
-    console.log("Signature recebida:", signature)
-    console.log("Body:", body.substring(0, 200) + "...")
+    console.log("Headers:", Object.fromEntries(request.headers.entries()))
+    console.log("Body:", body)
+    console.log("Signature:", signature)
 
-    // Verificar assinatura do webhook
-    if (signature && process.env.BLING_WEBHOOK_SECRET) {
+    // Verificar assinatura do webhook se configurada
+    if (process.env.BLING_WEBHOOK_SECRET && signature) {
       const expectedSignature = crypto.createHmac("sha256", process.env.BLING_WEBHOOK_SECRET).update(body).digest("hex")
 
       if (signature !== expectedSignature) {
         console.error("Assinatura inválida do webhook")
-        return NextResponse.json({ error: "Assinatura inválida" }, { status: 401 })
+        return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
       }
     }
 
@@ -26,45 +28,58 @@ export async function POST(request: NextRequest) {
       webhookData = JSON.parse(body)
     } catch (error) {
       console.error("Erro ao fazer parse do webhook:", error)
-      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
     }
 
     console.log("Dados do webhook:", JSON.stringify(webhookData, null, 2))
 
-    // Processar diferentes tipos de webhook
-    const { event, data } = webhookData
-
-    switch (event) {
-      case "produto.criado":
-        console.log("Produto criado:", data.id)
-        break
-      case "produto.atualizado":
-        console.log("Produto atualizado:", data.id)
-        break
-      case "produto.excluido":
-        console.log("Produto excluído:", data.id)
-        break
-      case "estoque.alterado":
-        console.log("Estoque alterado:", data)
-        break
-      default:
-        console.log("Evento não reconhecido:", event)
+    // Salvar webhook no banco para auditoria
+    try {
+      await sql`
+        INSERT INTO bling_webhook_logs (event_type, payload, signature, processed_at, status)
+        VALUES (
+          ${webhookData.event || "unknown"}, 
+          ${JSON.stringify(webhookData)}, 
+          ${signature || null}, 
+          NOW(), 
+          'received'
+        )
+      `
+    } catch (dbError) {
+      console.error("Erro ao salvar webhook no banco:", dbError)
+      // Continua mesmo com erro de DB
     }
 
-    // Aqui você processaria o webhook conforme sua lógica de negócio
-    // Por exemplo, atualizar banco de dados local, sincronizar dados, etc.
+    // Processar diferentes tipos de eventos
+    switch (webhookData.event) {
+      case "produto.criado":
+        console.log("Produto criado:", webhookData.data?.id)
+        break
+      case "produto.atualizado":
+        console.log("Produto atualizado:", webhookData.data?.id)
+        break
+      case "produto.excluido":
+        console.log("Produto excluído:", webhookData.data?.id)
+        break
+      case "estoque.alterado":
+        console.log("Estoque alterado:", webhookData.data)
+        break
+      default:
+        console.log("Evento não reconhecido:", webhookData.event)
+    }
 
     return NextResponse.json({
       success: true,
       message: "Webhook processado com sucesso",
-      event: event,
-      timestamp: new Date().toISOString(),
+      event: webhookData.event,
     })
   } catch (error: any) {
+    console.error("=== ERRO NO WEBHOOK ===")
     console.error("Erro ao processar webhook:", error)
+
     return NextResponse.json(
       {
-        error: "Erro interno ao processar webhook",
+        error: "Erro interno do servidor",
         message: error.message,
       },
       { status: 500 },
@@ -73,10 +88,26 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({
-    message: "Endpoint de webhooks do Bling",
-    url: `${process.env.NEXT_PUBLIC_BASE_URL}/api/bling/webhooks`,
-    methods: ["POST"],
-    events: ["produto.criado", "produto.atualizado", "produto.excluido", "estoque.alterado"],
-  })
+  try {
+    // Endpoint para verificar status dos webhooks
+    const result = await sql`
+      SELECT 
+        event_type,
+        COUNT(*) as total,
+        MAX(processed_at) as last_received
+      FROM bling_webhook_logs 
+      WHERE processed_at > NOW() - INTERVAL '24 hours'
+      GROUP BY event_type
+      ORDER BY total DESC
+    `
+
+    return NextResponse.json({
+      status: "Webhook endpoint ativo",
+      last_24h_events: result.rows,
+      endpoint_url: `${process.env.NEXT_PUBLIC_BASE_URL}/api/bling/webhooks`,
+    })
+  } catch (error: any) {
+    console.error("Erro ao verificar status dos webhooks:", error)
+    return NextResponse.json({ error: "Erro ao verificar status", message: error.message }, { status: 500 })
+  }
 }
