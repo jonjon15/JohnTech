@@ -7,36 +7,36 @@ export async function POST() {
 
     const userEmail = "admin@johntech.com"
 
+    // Contar tokens antes da remoção
+    const countBefore = await sql`SELECT COUNT(*) as count FROM bling_tokens WHERE user_email = ${userEmail}`
+
+    console.log("Tokens antes da remoção:", countBefore.rows[0].count)
+
     // Remover todos os tokens do usuário
-    const deleteResult = await sql`
-      DELETE FROM bling_tokens 
-      WHERE user_email = ${userEmail}
-    `
+    const deleteResult = await sql`DELETE FROM bling_tokens WHERE user_email = ${userEmail}`
 
-    console.log(`Tokens removidos: ${deleteResult.rowCount}`)
+    console.log("Resultado da remoção:", deleteResult)
 
-    // Verificar se ainda existem tokens
-    const remainingTokens = await sql`
-      SELECT COUNT(*) as count FROM bling_tokens 
-      WHERE user_email = ${userEmail}
-    `
+    // Contar tokens após a remoção
+    const countAfter = await sql`SELECT COUNT(*) as count FROM bling_tokens WHERE user_email = ${userEmail}`
 
-    const tokensRemaining = Number.parseInt(remainingTokens.rows[0].count)
+    console.log("Tokens após a remoção:", countAfter.rows[0].count)
 
-    console.log(`Tokens restantes: ${tokensRemaining}`)
+    const tokensRemoved = Number.parseInt(countBefore.rows[0].count) - Number.parseInt(countAfter.rows[0].count)
+
+    console.log("=== RESET CONCLUÍDO COM SUCESSO ===")
+    console.log("Tokens removidos:", tokensRemoved)
 
     return NextResponse.json({
       success: true,
-      message: `Autenticação resetada com sucesso. ${deleteResult.rowCount} token(s) removido(s).`,
+      message: "Autenticação resetada com sucesso",
       user_email: userEmail,
-      tokens_removed: deleteResult.rowCount,
-      tokens_remaining: tokensRemaining,
-      next_step: "Faça nova autenticação em /configuracao-bling",
-      auth_url: "/configuracao-bling",
+      tokens_removed: tokensRemoved,
       timestamp: new Date().toISOString(),
+      next_step: "Faça nova autenticação em /configuracao-bling",
     })
   } catch (error: any) {
-    console.error("=== ERRO NO RESET DA AUTENTICAÇÃO ===")
+    console.error("=== ERRO NO RESET ===")
     console.error("Erro:", error)
 
     return NextResponse.json(
@@ -49,12 +49,4 @@ export async function POST() {
       { status: 500 },
     )
   }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    message: "Use POST para resetar a autenticação",
-    endpoint: "/api/auth/bling/reset",
-    method: "POST",
-  })
 }

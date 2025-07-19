@@ -1,12 +1,12 @@
 -- Criar tabela para armazenar tokens do Bling
 CREATE TABLE IF NOT EXISTS bling_tokens (
-    id SERIAL PRIMARY KEY,
-    user_email VARCHAR(255) UNIQUE NOT NULL,
-    access_token TEXT NOT NULL,
-    refresh_token TEXT,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id SERIAL PRIMARY KEY,
+  user_email VARCHAR(255) UNIQUE NOT NULL,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Criar índices para melhor performance
@@ -14,18 +14,18 @@ CREATE INDEX IF NOT EXISTS idx_bling_tokens_user_email ON bling_tokens(user_emai
 CREATE INDEX IF NOT EXISTS idx_bling_tokens_expires_at ON bling_tokens(expires_at);
 
 -- Criar tabela para logs de webhooks (opcional)
-CREATE TABLE IF NOT EXISTS bling_webhook_logs (
-    id SERIAL PRIMARY KEY,
-    event_type VARCHAR(100) NOT NULL,
-    payload JSONB NOT NULL,
-    signature VARCHAR(255),
-    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(50) DEFAULT 'received'
+CREATE TABLE IF NOT EXISTS webhook_logs (
+  id SERIAL PRIMARY KEY,
+  event_type VARCHAR(100) NOT NULL,
+  resource_id VARCHAR(100),
+  payload JSONB,
+  processed_at TIMESTAMP DEFAULT NOW(),
+  status VARCHAR(50) DEFAULT 'received'
 );
 
 -- Criar índice para logs de webhooks
-CREATE INDEX IF NOT EXISTS idx_bling_webhook_logs_event_type ON bling_webhook_logs(event_type);
-CREATE INDEX IF NOT EXISTS idx_bling_webhook_logs_processed_at ON bling_webhook_logs(processed_at);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_event_type ON webhook_logs(event_type);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_processed_at ON webhook_logs(processed_at);
 
 -- Inserir usuário padrão se não existir
 INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at)
@@ -34,9 +34,9 @@ ON CONFLICT (user_email) DO NOTHING;
 
 -- Verificar se as tabelas foram criadas
 SELECT 
-    table_name,
-    table_type
+  table_name,
+  table_type
 FROM information_schema.tables 
 WHERE table_schema = 'public' 
-AND table_name IN ('bling_tokens', 'bling_webhook_logs')
+AND table_name IN ('bling_tokens', 'webhook_logs')
 ORDER BY table_name;
