@@ -11,6 +11,7 @@ import { Copy, ExternalLink, Settings, CheckCircle, AlertTriangle } from "lucide
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { useTheme } from "@/contexts/theme-context" // Corrigido
+import BlingIntegrationTest from "@/components/bling-integration-test"
 
 export default function ConfiguracaoBlingPage() {
   const [copied, setCopied] = useState(false)
@@ -226,6 +227,8 @@ export default function ConfiguracaoBlingPage() {
             </div>
           </CardContent>
         </Card>
+
+        <BlingIntegrationTest />
 
         <Card
           className={`mt-8 ${isWakanda ? "bg-green-600/10 border-green-500/30" : "bg-blue-600/10 border-blue-500/30"}`}

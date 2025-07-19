@@ -1,0 +1,22 @@
+const crypto = require("crypto")
+
+// Gera uma chave secreta de 64 caracteres hexadecimais
+const webhookSecret = crypto.randomBytes(32).toString("hex")
+
+console.log("=".repeat(60))
+console.log("🔐 WEBHOOK SECRET GERADO")
+console.log("=".repeat(60))
+console.log("")
+console.log("Copie esta chave e adicione como variável de ambiente:")
+console.log("")
+console.log(`BLING_WEBHOOK_SECRET=${webhookSecret}`)
+console.log("")
+console.log("=".repeat(60))
+console.log("📋 INSTRUÇÕES:")
+console.log("=".repeat(60))
+console.log("1. Copie a chave acima")
+console.log("2. No Vercel: Settings → Environment Variables")
+console.log("3. Adicione: BLING_WEBHOOK_SECRET = [chave copiada]")
+console.log("4. Redeploy o projeto")
+console.log("5. Configure a mesma chave no painel do Bling")
+console.log("=".repeat(60))
