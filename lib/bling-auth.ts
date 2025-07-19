@@ -61,7 +61,7 @@ async function refreshAccessToken(userEmail: string, refreshToken: string): Prom
     }
 
     const tokenData = await response.json()
-    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
 
     // Atualizar token no banco
     await sql`
