@@ -4,36 +4,29 @@ import { randomBytes } from "crypto"
 export async function GET(request: NextRequest) {
   try {
     const clientId = process.env.BLING_CLIENT_ID
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin
+    const redirectUri = process.env.REDIRECT_URI
 
-    if (!clientId) {
-      return NextResponse.json({ error: "BLING_CLIENT_ID não configurado" }, { status: 500 })
+    if (!clientId || !redirectUri) {
+      return NextResponse.json(
+        {
+          error: "BLING_CLIENT_ID ou REDIRECT_URI não configurado",
+        },
+        { status: 500 },
+      )
     }
 
     // Gerar state para segurança (CSRF protection)
     const state = randomBytes(32).toString("hex")
 
-    // Definir escopos conforme documentação Bling
-    const scopes = [
-      "produtos.read",
-      "produtos.write",
-      "estoque.read",
-      "estoque.write",
-      "pedidos.read",
-      "pedidos.write",
-      "nfe.read",
-      "nfe.write",
-    ].join(" ")
-
-    const redirectUri = `${baseUrl}/auth/callback`
-
-    // URL de autorização conforme documentação oficial
-    const authUrl = new URL("https://www.bling.com.br/Api/v3/oauth/authorize")
+    // URL de autorização conforme documentação oficial do Bling
+    const authUrl = new URL("https://www.bling.com.br/OAuth2/views/login.php")
     authUrl.searchParams.set("response_type", "code")
     authUrl.searchParams.set("client_id", clientId)
     authUrl.searchParams.set("redirect_uri", redirectUri)
-    authUrl.searchParams.set("scope", scopes)
     authUrl.searchParams.set("state", state)
+
+    console.log("OAuth URL:", authUrl.toString())
+    console.log("Redirect URI:", redirectUri)
 
     // Salvar state na sessão/cookie para validação posterior
     const response = NextResponse.redirect(authUrl.toString())

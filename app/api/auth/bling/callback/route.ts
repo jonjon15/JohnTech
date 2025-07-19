@@ -3,7 +3,7 @@ import { sql } from "@/lib/db"
 
 const BLING_CLIENT_ID = process.env.BLING_CLIENT_ID!
 const BLING_CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
-const BLING_TOKEN_URL = "https://www.bling.com.br/Api/v3/oauth/token"
+const REDIRECT_URI = process.env.REDIRECT_URI!
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -40,13 +40,12 @@ export async function GET(request: NextRequest) {
 
   // Verifica o state (opcional, mas recomendado para segurança)
   if (state) {
-    // Aqui você pode validar se o state corresponde ao que foi enviado
     console.log("State recebido:", state)
   }
 
   try {
     // Troca o código pelo token de acesso
-    const tokenResponse = await exchangeCodeForToken(code, request.url)
+    const tokenResponse = await exchangeCodeForToken(code)
 
     if (!tokenResponse.success) {
       callbackUrl.searchParams.set("error", "token_failed")
@@ -71,25 +70,24 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function exchangeCodeForToken(code: string, requestUrl: string) {
+async function exchangeCodeForToken(code: string) {
   try {
-    const baseUrl = new URL(requestUrl).origin
-    const redirectUri = `${baseUrl}/auth/callback`
+    console.log("Trocando código por token...")
+    console.log("Redirect URI:", REDIRECT_URI)
 
     const formData = new URLSearchParams({
       grant_type: "authorization_code",
       code: code,
-      redirect_uri: redirectUri,
+      redirect_uri: REDIRECT_URI,
+      client_id: BLING_CLIENT_ID,
+      client_secret: BLING_CLIENT_SECRET,
     })
 
-    const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
-
-    const response = await fetch(BLING_TOKEN_URL, {
+    const response = await fetch("https://www.bling.com.br/OAuth2/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
-        Authorization: `Basic ${credentials}`,
       },
       body: formData,
     })
@@ -104,6 +102,7 @@ async function exchangeCodeForToken(code: string, requestUrl: string) {
     }
 
     const tokenData = await response.json()
+    console.log("Token obtido com sucesso")
 
     return {
       success: true,
