@@ -1,32 +1,49 @@
 import { Pool } from "pg"
-import { getTokens } from "./tokens" // Import the getTokens function
+
+declare global {
+  // Evita recriar o pool em hot-reload no dev
+  // eslint-disable-next-line no-var
+  var _pgPool: Pool | undefined
+}
 
 // Variável global para armazenar o pool de conexões
-let pool: Pool | null = null
+const _pool: Pool | null = null
 
 /**
- * Retorna uma instância do pool de conexões do PostgreSQL.
- * Garante que apenas uma instância do pool seja criada (singleton pattern).
+ * Retorna uma instância singleton do Pool.
  */
-export function getPool(): Pool {
-  if (!pool) {
-    if (!process.env.DATABASE_URL) {
-      throw new Error("DATABASE_URL não está definida nas variáveis de ambiente.")
+export function getPool() {
+  if (!global._pgPool) {
+    const connectionString = process.env.DATABASE_URL
+    if (!connectionString) {
+      throw new Error("DATABASE_URL não definida nas variáveis de ambiente")
     }
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-      max: 20, // Número máximo de clientes ociosos no pool
-      idleTimeoutMillis: 30000, // Tempo máximo que um cliente pode ficar ocioso antes de ser removido
-      connectionTimeoutMillis: 2000, // Tempo máximo para adquirir uma conexão
+    global._pgPool = new Pool({
+      connectionString,
+      ssl:
+        connectionString.includes("localhost") || connectionString.includes("127.0.0.1")
+          ? false
+          : { rejectUnauthorized: false },
     })
 
-    // Adiciona um listener para erros no pool
-    pool.on("error", (err) => {
-      console.error("❌ Erro inesperado no pool de conexões do PostgreSQL:", err)
+    // Log de erro para facilitar depuração em produção
+    global._pgPool.on("error", (err) => {
+      console.error("🐘  Erro no pool PostgreSQL:", err)
     })
   }
-  return pool
+  return global._pgPool
+}
+
+/**
+ * Consulta a tabela bling_tokens pelo e-mail do usuário
+ */
+export async function getBlingTokens(userEmail: string) {
+  const pool = getPool()
+  const { rows } = await pool.query(
+    `SELECT * FROM bling_tokens WHERE user_email = $1 ORDER BY updated_at DESC LIMIT 1`,
+    [userEmail],
+  )
+  return rows[0] ?? null
 }
 
 // Interfaces
@@ -402,8 +419,8 @@ function normalizeProduct(row: any): Product {
 }
 
 // --- exports exigidos pelo sistema ---
-export default getPool() // default export chamado "pool"
-export { getTokens as getBlingTokens }
+const poolInstance = getPool()
+export default poolInstance // default export chamado "pool"
 
 // Aliases exigidos pelo deploy (Vercel build)
 export { logWebhook as createWebhookLog }

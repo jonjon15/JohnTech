@@ -4,6 +4,10 @@
  */
 
 import crypto from "crypto"
+import { NextResponse } from "next/server"
+import { handleBlingError, logRequest } from "./bling-error-handler"
+
+const WEBHOOK_SECRET = process.env.BLING_WEBHOOK_SECRET
 
 export interface WebhookEvent {
   event: string
@@ -82,13 +86,36 @@ export class BlingWebhookHandler {
   }
 }
 
-// Handler simples para exportações do sistema
-export async function handleWebhookEvent(secret: string, rawBody: string, signature: string) {
-  const handler = new BlingWebhookHandler(secret)
-  handler.setupDefaultHandlers()
-  if (!handler.validateSignature(rawBody, signature)) {
-    throw new Error("Assinatura inválida")
+/**
+ * Verifica a assinatura do Bling (simplificada: compara o header "x-bling-signature")
+ */
+function isValidSignature(req: Request): boolean {
+  if (!WEBHOOK_SECRET) return false
+  const header = req.headers.get("x-bling-signature") ?? ""
+  return header === WEBHOOK_SECRET
+}
+
+/**
+ * Função exportada que processará eventos de webhook
+ */
+export async function handleWebhookEvent(req: Request): Promise<Response> {
+  const requestId = crypto.randomUUID()
+  const handler = new BlingWebhookHandler(WEBHOOK_SECRET ?? "")
+
+  try {
+    if (!isValidSignature(req)) {
+      return NextResponse.json({ success: false, message: "Assinatura inválida" }, { status: 401 })
+    }
+
+    const event = await req.json()
+    logRequest(requestId, { event })
+
+    handler.setupDefaultHandlers()
+    await handler.process(event)
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    const error = handleBlingError(err)
+    return NextResponse.json({ success: false, error }, { status: error.statusCode })
   }
-  const event: WebhookEvent = JSON.parse(rawBody)
-  await handler.process(event)
 }
