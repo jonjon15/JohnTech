@@ -1,208 +1,350 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle, AlertTriangle, RefreshCw, Database, Webhook, Key, Globe } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Progress } from "@/components/ui/progress"
+import { Play, CheckCircle, XCircle, Clock, Loader2, Activity } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useTheme } from "@/contexts/theme-context"
 
 interface TestResult {
   name: string
-  status: "success" | "error" | "warning" | "loading"
-  message: string
+  status: "pending" | "running" | "success" | "error"
+  message?: string
+  duration?: number
   details?: any
 }
 
-export default function BlingIntegrationTest() {
-  const [isRunning, setIsRunning] = useState(false)
-  const [results, setResults] = useState<TestResult[]>([])
-  const { toast } = useToast()
-  const { theme } = useTheme()
-  const isWakanda = theme === "wakanda"
+interface TestSuite {
+  auth: TestResult
+  database: TestResult
+  api: TestResult
+  products: TestResult
+  homologation: TestResult
+}
 
-  const runTests = async () => {
-    setIsRunning(true)
-    setResults([])
+export default function BlingIntegrationTest() {
+  const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [results, setResults] = useState<TestSuite>({
+    auth: { name: "Autenticação", status: "pending" },
+    database: { name: "Banco de Dados", status: "pending" },
+    api: { name: "API Bling", status: "pending" },
+    products: { name: "Produtos", status: "pending" },
+    homologation: { name: "Homologação", status: "pending" },
+  })
+  const { toast } = useToast()
+
+  const updateTestResult = (key: keyof TestSuite, update: Partial<TestResult>) => {
+    setResults((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], ...update },
+    }))
+  }
+
+  const runTest = async (
+    key: keyof TestSuite,
+    testFn: () => Promise<{ success: boolean; message: string; details?: any }>,
+  ) => {
+    const startTime = Date.now()
+    updateTestResult(key, { status: "running" })
+
+    try {
+      const result = await testFn()
+      const duration = Date.now() - startTime
+
+      updateTestResult(key, {
+        status: result.success ? "success" : "error",
+        message: result.message,
+        duration,
+        details: result.details,
+      })
+
+      return result.success
+    } catch (error: any) {
+      const duration = Date.now() - startTime
+      updateTestResult(key, {
+        status: "error",
+        message: error.message,
+        duration,
+      })
+      return false
+    }
+  }
+
+  const testAuth = async () => {
+    const response = await fetch("/api/auth/bling/status")
+    const data = await response.json()
+
+    if (response.ok && data.authenticated) {
+      return {
+        success: true,
+        message: `Token válido até ${new Date(data.expires_at).toLocaleString()}`,
+        details: data,
+      }
+    } else {
+      return {
+        success: false,
+        message: data.message || "Token não encontrado ou inválido",
+        details: data,
+      }
+    }
+  }
+
+  const testDatabase = async () => {
+    const response = await fetch("/api/db/status")
+    const data = await response.json()
+
+    if (response.ok && data.connected) {
+      return {
+        success: true,
+        message: `Conectado - ${data.database_name}`,
+        details: data,
+      }
+    } else {
+      return {
+        success: false,
+        message: data.error || "Erro de conexão",
+        details: data,
+      }
+    }
+  }
+
+  const testApi = async () => {
+    const response = await fetch("/api/bling/status")
+    const data = await response.json()
+
+    if (response.ok && data.api_available) {
+      return {
+        success: true,
+        message: `API respondendo em ${data.response_time}ms`,
+        details: data,
+      }
+    } else {
+      return {
+        success: false,
+        message: data.error || "API indisponível",
+        details: data,
+      }
+    }
+  }
+
+  const testProducts = async () => {
+    const response = await fetch("/api/bling/products")
+    const data = await response.json()
+
+    if (response.ok && data.success) {
+      const productCount = data.data?.data?.length || 0
+      return {
+        success: true,
+        message: `${productCount} produtos encontrados`,
+        details: data,
+      }
+    } else {
+      return {
+        success: false,
+        message: data.error?.message || "Erro ao buscar produtos",
+        details: data,
+      }
+    }
+  }
+
+  const testHomologation = async () => {
+    const response = await fetch("/api/bling/homologacao/produtos")
+    const data = await response.json()
+
+    if (response.ok && data.success) {
+      const productCount = data.data?.data?.length || 0
+      return {
+        success: true,
+        message: `${productCount} produtos de homologação`,
+        details: data,
+      }
+    } else {
+      return {
+        success: false,
+        message: data.error?.message || "Erro na homologação",
+        details: data,
+      }
+    }
+  }
+
+  const runAllTests = async () => {
+    setRunning(true)
+    setProgress(0)
 
     const tests = [
-      { name: "Banco de Dados", endpoint: "/api/db/status", icon: Database },
-      { name: "Autenticação OAuth", endpoint: "/api/auth/bling/status", icon: Key },
-      { name: "API do Bling", endpoint: "/api/bling/status", icon: Globe },
-      { name: "Webhooks", endpoint: "/api/bling/webhooks/status", icon: Webhook },
+      { key: "auth" as const, fn: testAuth, weight: 20 },
+      { key: "database" as const, fn: testDatabase, weight: 20 },
+      { key: "api" as const, fn: testApi, weight: 20 },
+      { key: "products" as const, fn: testProducts, weight: 20 },
+      { key: "homologation" as const, fn: testHomologation, weight: 20 },
     ]
 
+    let currentProgress = 0
+    let successCount = 0
+
     for (const test of tests) {
-      setResults((prev) => [...prev, { name: test.name, status: "loading", message: "Testando..." }])
+      const success = await runTest(test.key, test.fn)
+      if (success) successCount++
 
-      try {
-        const response = await fetch(test.endpoint)
-        const data = await response.json()
+      currentProgress += test.weight
+      setProgress(currentProgress)
 
-        setResults((prev) =>
-          prev.map((result) =>
-            result.name === test.name
-              ? {
-                  name: test.name,
-                  status: response.ok ? "success" : "error",
-                  message: data.message || (response.ok ? "Funcionando corretamente" : "Erro na configuração"),
-                  details: data,
-                }
-              : result,
-          ),
-        )
-      } catch (error) {
-        setResults((prev) =>
-          prev.map((result) =>
-            result.name === test.name
-              ? {
-                  name: test.name,
-                  status: "error",
-                  message: error instanceof Error ? error.message : "Erro desconhecido",
-                }
-              : result,
-          ),
-        )
-      }
-
-      // Pequena pausa entre os testes
+      // Pequena pausa entre testes
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
 
-    setIsRunning(false)
+    setRunning(false)
 
-    // Mostra resultado geral
-    const hasErrors = results.some((r) => r.status === "error")
-    const hasWarnings = results.some((r) => r.status === "warning")
-
-    if (!hasErrors && !hasWarnings) {
+    // Toast final
+    if (successCount === tests.length) {
       toast({
         title: "✅ Todos os testes passaram!",
-        description: "Sua integração com o Bling está funcionando corretamente",
-      })
-    } else if (hasErrors) {
-      toast({
-        title: "❌ Alguns testes falharam",
-        description: "Verifique as configurações e tente novamente",
-        variant: "destructive",
+        description: "Integração Bling funcionando perfeitamente",
       })
     } else {
       toast({
-        title: "⚠️ Testes com avisos",
-        description: "Algumas configurações podem precisar de atenção",
+        title: `⚠️ ${successCount}/${tests.length} testes passaram`,
+        description: "Verifique os erros e tente novamente",
+        variant: "destructive",
       })
     }
   }
 
   const getStatusIcon = (status: TestResult["status"]) => {
     switch (status) {
+      case "pending":
+        return <Clock className="h-4 w-4 text-gray-400" />
+      case "running":
+        return <Loader2 className="h-4 w-4 text-blue-400 animate-spin" />
       case "success":
         return <CheckCircle className="h-4 w-4 text-green-400" />
       case "error":
-        return <AlertTriangle className="h-4 w-4 text-red-400" />
-      case "warning":
-        return <AlertTriangle className="h-4 w-4 text-yellow-400" />
-      case "loading":
-        return <RefreshCw className="h-4 w-4 text-blue-400 animate-spin" />
-      default:
-        return null
+        return <XCircle className="h-4 w-4 text-red-400" />
     }
   }
 
   const getStatusColor = (status: TestResult["status"]) => {
     switch (status) {
+      case "pending":
+        return "bg-gray-600/20 border-gray-500/30"
+      case "running":
+        return "bg-blue-600/20 border-blue-500/30"
       case "success":
-        return "bg-green-500/20 text-green-400 border-green-500/30"
+        return "bg-green-600/20 border-green-500/30"
       case "error":
-        return "bg-red-500/20 text-red-400 border-red-500/30"
-      case "warning":
-        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
-      case "loading":
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30"
-      default:
-        return "bg-gray-500/20 text-gray-400 border-gray-500/30"
+        return "bg-red-600/20 border-red-500/30"
     }
   }
 
   return (
-    <Card
-      className={`backdrop-blur-sm mt-8 ${isWakanda ? "bg-green-950/20 border-green-500/20 wakanda-border" : "bg-white/5 border-white/10"}`}
-    >
+    <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
       <CardHeader>
-        <CardTitle className={`${isWakanda ? "text-green-100" : "text-white"} flex items-center gap-2`}>
-          <RefreshCw className="h-5 w-5" />
-          Teste de Integração
+        <CardTitle className="text-white flex items-center gap-2">
+          <Activity className="h-6 w-6" />
+          Teste de Integração Bling
         </CardTitle>
-        <CardDescription className={`${isWakanda ? "text-green-100/70" : "text-white/70"}`}>
-          Verifique se todos os componentes estão funcionando corretamente
+        <CardDescription className="text-white/70">
+          Verificação completa da conectividade e funcionalidade
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <Button
-          onClick={runTests}
-          disabled={isRunning}
-          className={`w-full ${isWakanda ? "bg-green-600 hover:bg-green-700 text-black font-semibold wakanda-glow" : "bg-purple-600 hover:bg-purple-700"}`}
-        >
-          {isRunning ? (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              Executando Testes...
-            </>
-          ) : (
-            "Executar Testes de Integração"
-          )}
-        </Button>
+      <CardContent className="space-y-6">
+        {/* Botão de execução */}
+        <div className="text-center">
+          <Button
+            onClick={runAllTests}
+            disabled={running}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3"
+          >
+            {running ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Executando Testes...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 mr-2" />
+                Executar Todos os Testes
+              </>
+            )}
+          </Button>
+        </div>
 
-        {results.length > 0 && (
-          <div className="space-y-3">
-            {results.map((result, index) => (
-              <div
-                key={index}
-                className={`flex items-center justify-between p-3 rounded-lg ${isWakanda ? "bg-green-950/30" : "bg-white/5"}`}
-              >
-                <div className="flex items-center gap-3">
-                  {getStatusIcon(result.status)}
-                  <div>
-                    <div className={`font-medium ${isWakanda ? "text-green-100" : "text-white"}`}>{result.name}</div>
-                    <div className={`text-sm ${isWakanda ? "text-green-100/70" : "text-white/70"}`}>
-                      {result.message}
-                    </div>
-                  </div>
-                </div>
-                <Badge className={getStatusColor(result.status)}>
-                  {result.status === "loading" ? "Testando" : result.status}
-                </Badge>
-              </div>
-            ))}
+        {/* Barra de progresso */}
+        {running && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm text-white/70">
+              <span>Progresso</span>
+              <span>{progress}%</span>
+            </div>
+            <Progress value={progress} className="bg-white/10" />
           </div>
         )}
 
-        {results.length > 0 && !isRunning && (
-          <Alert
-            className={`${
-              results.every((r) => r.status === "success")
-                ? isWakanda
-                  ? "bg-green-600/10 border-green-500/30"
-                  : "bg-green-600/10 border-green-500/30"
-                : "bg-red-600/10 border-red-500/30"
-            }`}
-          >
-            {results.every((r) => r.status === "success") ? (
-              <CheckCircle className="h-4 w-4 text-green-400" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 text-red-400" />
-            )}
-            <AlertDescription
-              className={results.every((r) => r.status === "success") ? "text-green-200" : "text-red-200"}
-            >
-              {results.every((r) => r.status === "success")
-                ? "🎉 Parabéns! Todos os componentes estão funcionando corretamente. Sua integração com o Bling está pronta para uso."
-                : "⚠️ Alguns componentes precisam de atenção. Verifique as configurações e variáveis de ambiente."}
-            </AlertDescription>
-          </Alert>
-        )}
+        {/* Resultados dos testes */}
+        <div className="space-y-3">
+          {Object.entries(results).map(([key, result]) => (
+            <div key={key} className={`p-4 rounded-lg border ${getStatusColor(result.status)}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {getStatusIcon(result.status)}
+                  <div>
+                    <div className="text-white font-medium">{result.name}</div>
+                    {result.message && <div className="text-white/70 text-sm">{result.message}</div>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {result.duration && (
+                    <Badge variant="outline" className="text-white border-white/20">
+                      {result.duration}ms
+                    </Badge>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className={`border-white/20 ${
+                      result.status === "success"
+                        ? "text-green-400"
+                        : result.status === "error"
+                          ? "text-red-400"
+                          : "text-white"
+                    }`}
+                  >
+                    {result.status === "pending" && "Aguardando"}
+                    {result.status === "running" && "Executando"}
+                    {result.status === "success" && "Sucesso"}
+                    {result.status === "error" && "Erro"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Resumo */}
+        <Separator className="bg-white/10" />
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold text-green-400">
+              {Object.values(results).filter((r) => r.status === "success").length}
+            </div>
+            <div className="text-white/70 text-sm">Sucessos</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-red-400">
+              {Object.values(results).filter((r) => r.status === "error").length}
+            </div>
+            <div className="text-white/70 text-sm">Erros</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-gray-400">
+              {Object.values(results).filter((r) => r.status === "pending").length}
+            </div>
+            <div className="text-white/70 text-sm">Pendentes</div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   )

@@ -3,68 +3,40 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@vercel/postgres'],
   },
-  
-  // Otimizações para performance
-  compress: true,
-  poweredByHeader: false,
-  
-  // Headers de segurança e performance
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-store, no-cache, must-revalidate',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-        ],
-      },
-    ]
+  env: {
+    BLING_API_URL: process.env.BLING_API_URL,
+    BLING_CLIENT_ID: process.env.BLING_CLIENT_ID,
+    NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
   },
-
-  // Configurações de timeout
-  serverRuntimeConfig: {
-    maxDuration: 10, // 10 segundos máximo
-  },
-
-  // Otimizações de build
-  swcMinify: true,
-  
-  // Configurações de imagem
   images: {
     domains: ['blob.v0.dev'],
-    formats: ['image/webp', 'image/avif'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'blob.v0.dev',
+        port: '',
+        pathname: '/**',
+      },
+    ],
     unoptimized: true,
   },
-
-  // Configurações de webpack para otimização
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-      }
-    }
-    
-    return config
-  },
-
   eslint: {
     ignoreDuringBuilds: true,
   },
   typescript: {
     ignoreBuildErrors: true,
+  },
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+        ],
+      },
+    ]
   },
 }
 

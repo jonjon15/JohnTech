@@ -1,50 +1,57 @@
 import { NextResponse } from "next/server"
-import { sql } from "@vercel/postgres"
+import { clearTokens } from "@/lib/bling-auth"
+import { createTablesIfNotExists } from "@/lib/db"
+
+const userEmail = "admin@johntech.com"
 
 export async function POST() {
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
+
   try {
-    console.log("=== INICIANDO RESET DA AUTENTICAÇÃO ===")
+    console.log(`🔄 [${requestId}] Reset Auth - INÍCIO`)
 
-    const userEmail = "admin@johntech.com"
+    // Garantir que as tabelas existem
+    await createTablesIfNotExists()
 
-    // Contar tokens antes da remoção
-    const countBefore = await sql`SELECT COUNT(*) as count FROM bling_tokens WHERE user_email = ${userEmail}`
+    // Limpar tokens
+    console.log(`🗑️ [${requestId}] Removendo tokens para: ${userEmail}`)
+    const cleared = await clearTokens(userEmail)
 
-    console.log("Tokens antes da remoção:", countBefore.rows[0].count)
+    const elapsedTime = Date.now() - startTime
 
-    // Remover todos os tokens do usuário
-    const deleteResult = await sql`DELETE FROM bling_tokens WHERE user_email = ${userEmail}`
+    if (cleared) {
+      console.log(`✅ [${requestId}] Reset concluído em ${elapsedTime}ms`)
 
-    console.log("Resultado da remoção:", deleteResult)
-
-    // Contar tokens após a remoção
-    const countAfter = await sql`SELECT COUNT(*) as count FROM bling_tokens WHERE user_email = ${userEmail}`
-
-    console.log("Tokens após a remoção:", countAfter.rows[0].count)
-
-    const tokensRemoved = Number.parseInt(countBefore.rows[0].count) - Number.parseInt(countAfter.rows[0].count)
-
-    console.log("=== RESET CONCLUÍDO COM SUCESSO ===")
-    console.log("Tokens removidos:", tokensRemoved)
-
-    return NextResponse.json({
-      success: true,
-      message: "Autenticação resetada com sucesso",
-      user_email: userEmail,
-      tokens_removed: tokensRemoved,
-      timestamp: new Date().toISOString(),
-      next_step: "Faça nova autenticação em /configuracao-bling",
-    })
+      return NextResponse.json({
+        success: true,
+        message: "Autenticação resetada com sucesso",
+        user_email: userEmail,
+        tokens_removed: 1,
+        elapsed_time: elapsedTime,
+        timestamp: new Date().toISOString(),
+        next_step: "Faça nova autenticação OAuth em /configuracao-bling",
+        request_id: requestId,
+      })
+    } else {
+      throw new Error("Falha ao remover tokens do banco de dados")
+    }
   } catch (error: any) {
-    console.error("=== ERRO NO RESET ===")
-    console.error("Erro:", error)
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro no reset:`, error)
 
     return NextResponse.json(
       {
         success: false,
-        error: "Erro ao resetar autenticação",
-        message: error.message,
+        message: error.message || "Erro interno no reset",
+        user_email: userEmail,
+        elapsed_time: elapsedTime,
         timestamp: new Date().toISOString(),
+        request_id: requestId,
+        error_details: {
+          type: error.constructor.name,
+          stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+        },
       },
       { status: 500 },
     )
