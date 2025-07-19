@@ -1,62 +1,89 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { BlingApiService } from "@/lib/bling-api-client"
-import { createTablesIfNotExists } from "@/lib/db"
+import { BlingApiClient } from "@/lib/bling-api-client"
+import { BlingErrorHandler } from "@/lib/bling-error-handler"
+import type { BlingSearchFilters } from "@/types/bling"
 
-const userEmail = process.env.BLING_USER_EMAIL || "admin@johntech.com"
+/**
+ * API para gerenciar pedidos do Bling
+ * https://developer.bling.com.br/referencia#/Pedidos%20de%20Venda
+ */
 
 export async function GET(request: NextRequest) {
   try {
-    await createTablesIfNotExists()
-
     const { searchParams } = new URL(request.url)
-    const page = Number.parseInt(searchParams.get("page") || "1")
-    const limit = Number.parseInt(searchParams.get("limit") || "100")
 
-    const blingService = new BlingApiService(userEmail)
-    const response = await blingService.getPedidos(page, limit)
-
-    if (!response.success) {
-      return NextResponse.json(
-        { error: "Failed to fetch orders", details: response.error },
-        { status: response.error?.statusCode || 500 },
-      )
+    // Monta filtros de busca
+    const filters: BlingSearchFilters = {
+      pagina: searchParams.get("pagina") ? Number.parseInt(searchParams.get("pagina")!) : 1,
+      limite: searchParams.get("limite") ? Number.parseInt(searchParams.get("limite")!) : 100,
+      dataInicial: searchParams.get("dataInicial") || undefined,
+      dataFinal: searchParams.get("dataFinal") || undefined,
+      idSituacao: searchParams.get("idSituacao") ? Number.parseInt(searchParams.get("idSituacao")!) : undefined,
+      idContato: searchParams.get("idContato") ? Number.parseInt(searchParams.get("idContato")!) : undefined,
     }
+
+    console.log("🔍 Buscando pedidos:", filters)
+
+    const response = await BlingApiClient.getOrders(filters)
 
     return NextResponse.json({
       success: true,
       data: response.data,
       pagination: {
-        page,
-        limit,
+        pagina: response.pagina,
+        limite: response.limite,
+        total: response.total,
       },
     })
-  } catch (error: any) {
-    console.error("Erro ao buscar pedidos:", error)
-    return NextResponse.json({ error: "Internal server error", message: error.message }, { status: 500 })
+  } catch (error) {
+    console.error("❌ Erro ao buscar pedidos:", error)
+
+    const errorDetails = BlingErrorHandler.processApiError(error)
+    const userMessage = BlingErrorHandler.getUserFriendlyMessage(error)
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: errorDetails.code,
+          message: userMessage,
+          details: errorDetails.description,
+        },
+      },
+      { status: 500 },
+    )
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    await createTablesIfNotExists()
+    const orderData = await request.json()
 
-    const body = await request.json()
-    const blingService = new BlingApiService(userEmail)
-    const response = await blingService.createPedido(body)
+    console.log("➕ Criando pedido:", orderData.numero || "novo")
 
-    if (!response.success) {
-      return NextResponse.json(
-        { error: "Failed to create order", details: response.error },
-        { status: response.error?.statusCode || 500 },
-      )
-    }
+    const order = await BlingApiClient.createOrder(orderData)
 
     return NextResponse.json({
       success: true,
-      data: response.data,
+      data: order,
+      message: "Pedido criado com sucesso",
     })
-  } catch (error: any) {
-    console.error("Erro ao criar pedido:", error)
-    return NextResponse.json({ error: "Internal server error", message: error.message }, { status: 500 })
+  } catch (error) {
+    console.error("❌ Erro ao criar pedido:", error)
+
+    const errorDetails = BlingErrorHandler.processApiError(error)
+    const userMessage = BlingErrorHandler.getUserFriendlyMessage(error)
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: errorDetails.code,
+          message: userMessage,
+          details: errorDetails.description,
+        },
+      },
+      { status: 500 },
+    )
   }
 }

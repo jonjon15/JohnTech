@@ -1,92 +1,74 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { handleWebhookEvent, validateWebhookSignature } from "@/lib/webhook-handler"
+import { WebhookHandler } from "@/lib/webhook-handler"
 import type { BlingWebhookEvent } from "@/types/bling"
 
+/**
+ * Endpoint para receber webhooks do Bling
+ * https://developer.bling.com.br/webhooks
+ */
 export async function POST(request: NextRequest) {
-  const requestId = crypto.randomUUID()
-  const startTime = Date.now()
-
   try {
-    console.log(`📨 [${requestId}] Webhook recebido do Bling`)
+    // Obtém o payload bruto
+    const payload = await request.text()
+    const signature = request.headers.get("x-bling-signature") || request.headers.get("x-hub-signature-256") || ""
 
-    const body = await request.text()
-    const signature = request.headers.get("x-bling-signature") || ""
+    console.log("📥 Webhook recebido:", {
+      signature: !!signature,
+      payloadLength: payload.length,
+    })
 
-    console.log(`📋 [${requestId}] Signature:`, signature ? "presente" : "ausente")
-    console.log(`📋 [${requestId}] Body length:`, body.length)
-
-    if (process.env.BLING_WEBHOOK_SECRET && signature) {
-      const isValid = validateWebhookSignature(body, signature)
-      if (!isValid) {
-        console.error(`❌ [${requestId}] Assinatura do webhook inválida`)
-        return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 })
-      }
-      console.log(`✅ [${requestId}] Assinatura do webhook válida`)
+    // Valida assinatura HMAC
+    if (!WebhookHandler.validateSignature(payload, signature)) {
+      console.error("❌ Assinatura do webhook inválida")
+      return NextResponse.json({ error: "Assinatura inválida" }, { status: 401 })
     }
 
-    let webhookData: BlingWebhookEvent
+    // Parse do payload
+    let event: BlingWebhookEvent
     try {
-      webhookData = JSON.parse(body)
-    } catch (parseError) {
-      console.error(`❌ [${requestId}] Erro ao fazer parse do JSON:`, parseError)
-      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 })
+      event = JSON.parse(payload)
+    } catch (error) {
+      console.error("❌ Payload JSON inválido:", error)
+      return NextResponse.json({ error: "Payload inválido" }, { status: 400 })
     }
 
-    console.log(`📋 [${requestId}] Evento:`, webhookData.evento?.tipo)
-    console.log(`📋 [${requestId}] ID do recurso:`, webhookData.retorno?.id)
-
-    const processed = await handleWebhookEvent(webhookData)
-
-    const elapsedTime = Date.now() - startTime
-
-    if (processed) {
-      console.log(`✅ [${requestId}] Webhook processado com sucesso em ${elapsedTime}ms`)
-      return NextResponse.json(
-        {
-          success: true,
-          message: "Webhook processed successfully",
-          requestId,
-          elapsedTime,
-        },
-        { status: 200 },
-      )
-    } else {
-      console.error(`❌ [${requestId}] Falha ao processar webhook em ${elapsedTime}ms`)
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Failed to process webhook",
-          requestId,
-          elapsedTime,
-        },
-        { status: 500 },
-      )
+    // Valida estrutura do evento
+    if (!event.evento || !event.ocorrencia || !event.data) {
+      console.error("❌ Estrutura do evento inválida:", event)
+      return NextResponse.json({ error: "Estrutura do evento inválida" }, { status: 400 })
     }
-  } catch (error: any) {
-    const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro no processamento do webhook:`, error)
 
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        message: error.message,
-        requestId,
-        elapsedTime,
-      },
-      { status: 500 },
-    )
+    // Processa evento de forma assíncrona
+    setImmediate(async () => {
+      try {
+        await WebhookHandler.processWebhookEvent(event)
+      } catch (error) {
+        console.error("❌ Erro ao processar webhook:", error)
+      }
+    })
+
+    // Retorna sucesso imediatamente (idempotência)
+    return NextResponse.json({ success: true }, { status: 200 })
+  } catch (error) {
+    console.error("❌ Erro no endpoint de webhook:", error)
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 })
   }
 }
 
+/**
+ * Endpoint para testar webhooks
+ */
 export async function GET() {
   try {
+    const stats = await WebhookHandler.getWebhookStats()
+
     return NextResponse.json({
-      status: "active",
-      message: "Webhook endpoint is ready to receive Bling events",
-      supportedEvents: ["produto", "pedido", "estoque", "contato"],
+      message: "Endpoint de webhooks funcionando",
+      stats,
       timestamp: new Date().toISOString(),
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: "Failed to get webhook status", message: error.message }, { status: 500 })
+  } catch (error) {
+    console.error("❌ Erro ao obter estatísticas de webhooks:", error)
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 })
   }
 }

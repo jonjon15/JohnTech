@@ -1,62 +1,92 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { BlingApiService } from "@/lib/bling-api-client"
-import { createTablesIfNotExists } from "@/lib/db"
+import { BlingApiClient } from "@/lib/bling-api-client"
+import { BlingErrorHandler } from "@/lib/bling-error-handler"
+import type { BlingSearchFilters } from "@/types/bling"
 
-const userEmail = process.env.BLING_USER_EMAIL || "admin@johntech.com"
+/**
+ * API para gerenciar produtos do Bling
+ * https://developer.bling.com.br/referencia#/Produtos
+ */
 
 export async function GET(request: NextRequest) {
   try {
-    await createTablesIfNotExists()
-
     const { searchParams } = new URL(request.url)
-    const page = Number.parseInt(searchParams.get("page") || "1")
-    const limit = Number.parseInt(searchParams.get("limit") || "100")
 
-    const blingService = new BlingApiService(userEmail)
-    const response = await blingService.getProdutos(page, limit)
-
-    if (!response.success) {
-      return NextResponse.json(
-        { error: "Failed to fetch products", details: response.error },
-        { status: response.error?.statusCode || 500 },
-      )
+    // Monta filtros de busca
+    const filters: BlingSearchFilters = {
+      pagina: searchParams.get("pagina") ? Number.parseInt(searchParams.get("pagina")!) : 1,
+      limite: searchParams.get("limite") ? Number.parseInt(searchParams.get("limite")!) : 100,
+      criterio: searchParams.get("criterio") || undefined,
+      tipo: searchParams.get("tipo") || undefined,
+      situacao: searchParams.get("situacao") || undefined,
+      codigo: searchParams.get("codigo") || undefined,
+      dataInicial: searchParams.get("dataInicial") || undefined,
+      dataFinal: searchParams.get("dataFinal") || undefined,
+      idCategoria: searchParams.get("idCategoria") ? Number.parseInt(searchParams.get("idCategoria")!) : undefined,
     }
+
+    console.log("🔍 Buscando produtos:", filters)
+
+    const response = await BlingApiClient.getProducts(filters)
 
     return NextResponse.json({
       success: true,
       data: response.data,
       pagination: {
-        page,
-        limit,
+        pagina: response.pagina,
+        limite: response.limite,
+        total: response.total,
       },
     })
-  } catch (error: any) {
-    console.error("Erro ao buscar produtos:", error)
-    return NextResponse.json({ error: "Internal server error", message: error.message }, { status: 500 })
+  } catch (error) {
+    console.error("❌ Erro ao buscar produtos:", error)
+
+    const errorDetails = BlingErrorHandler.processApiError(error)
+    const userMessage = BlingErrorHandler.getUserFriendlyMessage(error)
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: errorDetails.code,
+          message: userMessage,
+          details: errorDetails.description,
+        },
+      },
+      { status: 500 },
+    )
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    await createTablesIfNotExists()
+    const productData = await request.json()
 
-    const body = await request.json()
-    const blingService = new BlingApiService(userEmail)
-    const response = await blingService.createProduto(body)
+    console.log("➕ Criando produto:", productData.nome)
 
-    if (!response.success) {
-      return NextResponse.json(
-        { error: "Failed to create product", details: response.error },
-        { status: response.error?.statusCode || 500 },
-      )
-    }
+    const product = await BlingApiClient.createProduct(productData)
 
     return NextResponse.json({
       success: true,
-      data: response.data,
+      data: product,
+      message: "Produto criado com sucesso",
     })
-  } catch (error: any) {
-    console.error("Erro ao criar produto:", error)
-    return NextResponse.json({ error: "Internal server error", message: error.message }, { status: 500 })
+  } catch (error) {
+    console.error("❌ Erro ao criar produto:", error)
+
+    const errorDetails = BlingErrorHandler.processApiError(error)
+    const userMessage = BlingErrorHandler.getUserFriendlyMessage(error)
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: errorDetails.code,
+          message: userMessage,
+          details: errorDetails.description,
+        },
+      },
+      { status: 500 },
+    )
   }
 }

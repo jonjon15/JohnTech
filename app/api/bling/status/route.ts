@@ -1,40 +1,67 @@
 import { NextResponse } from "next/server"
-import { getValidAccessToken } from "@/lib/bling-auth"
-import { testConnection } from "@/lib/db"
+import { BlingAuth } from "@/lib/bling-auth"
+import { BlingApiClient } from "@/lib/bling-api-client"
+import { WebhookHandler } from "@/lib/webhook-handler"
 
-const userEmail = process.env.BLING_USER_EMAIL || "admin@johntech.com"
-
+/**
+ * Endpoint para verificar status da integração com Bling
+ */
 export async function GET() {
   try {
-    const dbStatus = await testConnection()
-    const accessToken = await getValidAccessToken(userEmail)
+    console.log("🔍 Verificando status da integração...")
 
-    return NextResponse.json({
-      status: "ok",
+    // Verifica autenticação
+    const authStatus = await BlingAuth.getAuthStatus()
+
+    // Verifica conectividade com API
+    const apiConnected = authStatus.authenticated ? await BlingApiClient.testConnection() : false
+
+    // Obtém estatísticas de rate limit
+    const rateLimit = BlingApiClient.getRateLimit()
+
+    // Obtém estatísticas de webhooks
+    const webhookStats = await WebhookHandler.getWebhookStats()
+
+    const status = {
       timestamp: new Date().toISOString(),
-      database: {
-        connected: dbStatus.success,
-        timestamp: dbStatus.timestamp,
-        error: dbStatus.error,
+      authentication: {
+        authenticated: authStatus.authenticated,
+        expiresAt: authStatus.expiresAt,
+        userInfo: authStatus.userInfo,
       },
-      bling: {
-        authenticated: !!accessToken,
-        userEmail: userEmail,
+      api: {
+        connected: apiConnected,
+        rateLimit: {
+          limit: rateLimit.limit,
+          remaining: rateLimit.remaining,
+          resetAt: new Date(rateLimit.reset).toISOString(),
+        },
       },
-      environment: {
-        nodeEnv: process.env.NODE_ENV,
-        hasClientId: !!process.env.BLING_CLIENT_ID,
-        hasClientSecret: !!process.env.BLING_CLIENT_SECRET,
-        hasBaseUrl: !!process.env.NEXT_PUBLIC_BASE_URL,
-        hasWebhookSecret: !!process.env.BLING_WEBHOOK_SECRET,
+      webhooks: webhookStats,
+      overall: {
+        status: authStatus.authenticated && apiConnected ? "healthy" : "error",
+        message: authStatus.authenticated
+          ? apiConnected
+            ? "Integração funcionando normalmente"
+            : "Problemas de conectividade com a API"
+          : "Não autenticado",
       },
-    })
-  } catch (error: any) {
+    }
+
+    console.log("✅ Status verificado:", status.overall.status)
+
+    return NextResponse.json(status)
+  } catch (error) {
+    console.error("❌ Erro ao verificar status:", error)
+
     return NextResponse.json(
       {
-        status: "error",
-        message: error.message,
         timestamp: new Date().toISOString(),
+        overall: {
+          status: "error",
+          message: "Erro ao verificar status da integração",
+        },
+        error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },
     )
