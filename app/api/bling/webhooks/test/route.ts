@@ -2,18 +2,6 @@ import { NextResponse } from "next/server"
 
 export async function POST() {
   try {
-    // Simula um webhook de teste
-    const testWebhookData = {
-      evento: "teste.webhook",
-      dados: {
-        id: "123",
-        nome: "Teste de Webhook",
-        timestamp: new Date().toISOString(),
-      },
-      ocorrencia: new Date().toISOString(),
-    }
-
-    // Verifica se o webhook secret está configurado
     const webhookSecret = process.env.BLING_WEBHOOK_SECRET
 
     if (!webhookSecret) {
@@ -26,13 +14,24 @@ export async function POST() {
       )
     }
 
-    // Simula processamento do webhook
-    console.log("Teste de webhook executado:", testWebhookData)
+    // Simula um webhook de teste
+    const testPayload = {
+      evento: "teste.webhook",
+      dados: {
+        id: "123",
+        nome: "Teste de Webhook",
+        timestamp: new Date().toISOString(),
+      },
+      ocorrencia: new Date().toISOString(),
+    }
+
+    console.log("🧪 Teste de webhook executado:", testPayload)
 
     return NextResponse.json({
       success: true,
       message: "Webhook testado com sucesso",
-      data: testWebhookData,
+      payload: testPayload,
+      secretConfigured: true,
     })
   } catch (error) {
     console.error("Erro no teste de webhook:", error)

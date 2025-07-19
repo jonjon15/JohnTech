@@ -1,74 +1,55 @@
--- Teste de integração do sistema Bling
--- Este script verifica se todas as tabelas e configurações estão corretas
+-- Teste de integração do banco de dados
+-- Verifica se as tabelas necessárias existem
 
--- 1. Verifica se a tabela users existe e tem as colunas corretas
+-- Verificar se a tabela de usuários existe
 SELECT 
-    column_name, 
-    data_type, 
-    is_nullable,
-    column_default
-FROM information_schema.columns 
-WHERE table_name = 'users' 
-ORDER BY ordinal_position;
+  CASE 
+    WHEN EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_name = 'users'
+    ) 
+    THEN 'users table exists ✅'
+    ELSE 'users table missing ❌'
+  END as users_status;
 
--- 2. Verifica se existem usuários cadastrados
+-- Verificar se a tabela de tokens existe  
 SELECT 
-    id,
-    email,
-    name,
-    CASE 
-        WHEN bling_access_token IS NOT NULL THEN 'Configurado'
-        ELSE 'Não configurado'
-    END as token_status,
-    CASE 
-        WHEN bling_token_expires_at > NOW() THEN 'Válido'
-        WHEN bling_token_expires_at IS NULL THEN 'Não definido'
-        ELSE 'Expirado'
-    END as token_validity,
-    created_at,
-    updated_at
-FROM users;
+  CASE 
+    WHEN EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_name = 'bling_tokens'
+    ) 
+    THEN 'bling_tokens table exists ✅'
+    ELSE 'bling_tokens table missing ❌'
+  END as tokens_status;
 
--- 3. Verifica tokens expirados
+-- Verificar se a tabela de produtos existe
 SELECT 
-    email,
-    bling_token_expires_at,
-    CASE 
-        WHEN bling_token_expires_at < NOW() THEN 'Expirado'
-        WHEN bling_token_expires_at > NOW() THEN 'Válido'
-        ELSE 'Não definido'
-    END as status,
-    EXTRACT(EPOCH FROM (bling_token_expires_at - NOW()))/3600 as hours_until_expiry
-FROM users 
-WHERE bling_access_token IS NOT NULL;
+  CASE 
+    WHEN EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_name = 'products'
+    ) 
+    THEN 'products table exists ✅'
+    ELSE 'products table missing ❌'
+  END as products_status;
 
--- 4. Estatísticas gerais
-SELECT 
-    COUNT(*) as total_users,
-    COUNT(bling_access_token) as users_with_tokens,
-    COUNT(CASE WHEN bling_token_expires_at > NOW() THEN 1 END) as users_with_valid_tokens,
-    COUNT(CASE WHEN bling_token_expires_at < NOW() THEN 1 END) as users_with_expired_tokens
-FROM users;
-
--- 5. Verifica se as variáveis de ambiente estão sendo usadas
--- (Este é um comentário informativo - as variáveis são verificadas no código)
-/*
-Variáveis que devem estar configuradas:
-- BLING_CLIENT_ID
-- BLING_CLIENT_SECRET  
-- BLING_WEBHOOK_SECRET
-- DATABASE_URL
-- NEXT_PUBLIC_BASE_URL
-*/
-
--- 6. Teste de inserção (opcional - descomente para testar)
-/*
-INSERT INTO users (email, name, created_at, updated_at) 
-VALUES ('teste@exemplo.com', 'Usuário Teste', NOW(), NOW())
+-- Teste de inserção simples
+INSERT INTO users (email, name, created_at) 
+VALUES ('test@example.com', 'Test User', NOW())
 ON CONFLICT (email) DO NOTHING;
-*/
 
--- 7. Limpeza de dados de teste (descomente se necessário)
-/*
-DELETE FROM users WHERE email = 'teste@exemplo.com';
-*/
+-- Verificar se o usuário foi inserido
+SELECT 
+  CASE 
+    WHEN EXISTS (
+      SELECT FROM users WHERE email = 'test@example.com'
+    )
+    THEN 'Test user created ✅'
+    ELSE 'Failed to create test user ❌'
+  END as user_creation_status;
+
+-- Limpar dados de teste
+DELETE FROM users WHERE email = 'test@example.com';
+
+SELECT 'Database integration test completed! 🎉' as final_status;

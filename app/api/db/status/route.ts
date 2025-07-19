@@ -1,37 +1,23 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { sql } from "@vercel/postgres"
 
 export async function GET() {
   try {
-    // Testa conexão com o banco
-    const result = await sql`SELECT NOW() as current_time, version() as db_version`
+    const result = await sql`SELECT NOW() as current_time`
 
-    if (result.length > 0) {
-      return NextResponse.json({
-        status: "online",
-        message: "Banco de dados conectado",
-        database: {
-          connected: true,
-          timestamp: result[0].current_time,
-          version: result[0].db_version,
-        },
-        responseTime: Date.now(),
-      })
-    } else {
-      throw new Error("Nenhum resultado retornado")
-    }
+    return NextResponse.json({
+      status: "connected",
+      message: "Banco de dados conectado",
+      timestamp: result.rows[0].current_time,
+    })
   } catch (error) {
-    console.error("Erro na conexão com o banco:", error)
+    console.error("Erro de conexão com banco:", error)
     return NextResponse.json(
       {
-        status: "offline",
-        message: "Falha na conexão com o banco de dados",
-        database: {
-          connected: false,
-          error: error instanceof Error ? error.message : "Erro desconhecido",
-        },
+        status: "error",
+        message: "Falha na conexão com banco de dados",
       },
-      { status: 503 },
+      { status: 500 },
     )
   }
 }

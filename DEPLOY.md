@@ -1,83 +1,81 @@
-# 🚀 Guia de Deploy - Integração Bling
+# 🚀 Guia de Deploy - BlingPro
 
 ## Pré-requisitos
 
-### 1. Variáveis de Ambiente (Vercel)
-Configure estas variáveis no painel da Vercel:
+- [x] Conta no Bling com aplicação criada
+- [x] Projeto no Vercel conectado ao GitHub
+- [x] Banco PostgreSQL configurado (Neon)
 
-\`\`\`bash
-BLING_CLIENT_ID=44866dbd8fe131077d73dbe3d60531016512c855
-BLING_CLIENT_SECRET=18176f2b734f4abced1893fe39a852b6f28ff53c2a564348ebfe960367d1
-BLING_WEBHOOK_SECRET=[gere usando: node scripts/generate-webhook-secret.js]
-DATABASE_URL=[sua URL do Neon/Postgres]
+## 1. Variáveis de Ambiente
+
+Configure no Vercel (Settings → Environment Variables):
+
+\`\`\`env
+BLING_CLIENT_ID=seu_client_id
+BLING_CLIENT_SECRET=seu_client_secret
+BLING_WEBHOOK_SECRET=09cd0c191a2d7d849609870b9166ab3b74e76ba95df54f0237bce24fb2af1e8b
+BLING_API_URL=https://www.bling.com.br/Api/v3
+DATABASE_URL=sua_url_do_postgres
 NEXT_PUBLIC_BASE_URL=https://johntech.vercel.app
 \`\`\`
 
-### 2. Configuração no Bling
-- URL de Redirecionamento: `https://johntech.vercel.app/auth/callback`
-- URL de Webhook: `https://johntech.vercel.app/api/bling/webhooks`
+## 2. Deploy
 
-## Passos para Deploy
-
-### 1. Verificar Arquivos
 \`\`\`bash
+# Verificar se está tudo pronto
 node scripts/pre-deploy-check.js
-\`\`\`
 
-### 2. Commit e Push
-\`\`\`bash
+# Fazer commit e push
 git add .
-git commit -m "feat: implementa integração completa com Bling API"
+git commit -m "feat: integração Bling completa"
 git push origin main
+
+# Aguardar deploy automático no Vercel
 \`\`\`
 
-### 3. Deploy Automático
-O Vercel fará o deploy automaticamente após o push.
+## 3. Pós-Deploy
 
-### 4. Verificar Deploy
+\`\`\`bash
+# Verificar se deploy funcionou
+node scripts/post-deploy-check.js
+
+# Executar scripts do banco (se necessário)
+# No painel da Vercel ou localmente
+\`\`\`
+
+## 4. Configurar no Bling
+
+1. Acesse: https://www.bling.com.br
+2. Vá em: Configurações → Aplicações → Sua App
+3. Configure:
+   - **URL de Callback**: `https://johntech.vercel.app/auth/callback`
+   - **URL de Webhook**: `https://johntech.vercel.app/api/bling/webhooks`
+   - **Webhook Secret**: `09cd0c191a2d7d849609870b9166ab3b74e76ba95df54f0237bce24fb2af1e8b`
+
+## 5. Testar
+
 1. Acesse: https://johntech.vercel.app/configuracao-bling
-2. Execute os testes de integração
-3. Teste a autenticação OAuth
-
-## Pós-Deploy
-
-### 1. Configurar Banco de Dados
-Execute os scripts SQL:
-- `scripts/create-database.sql`
-- `scripts/seed-sample-data.sql`
-- `scripts/verify-and-create-user.sql`
-
-### 2. Testar Integração
-1. Acesse `/configuracao-bling`
-2. Clique em "Executar Testes de Integração"
+2. Execute "Testes de Integração"
 3. Todos devem passar ✅
 
-### 3. Configurar Webhooks
-1. Gere o webhook secret: `node scripts/generate-webhook-secret.js`
-2. Configure no Vercel
-3. Configure no painel do Bling
+## 6. Monitoramento
+
+- Status da API: `/api/bling/status`
+- Status Auth: `/api/auth/bling/status`  
+- Status DB: `/api/db/status`
+- Status Webhooks: `/api/bling/webhooks/status`
 
 ## Troubleshooting
 
-### Erro 500 - Internal Server Error
-- Verifique se todas as variáveis de ambiente estão configuradas
-- Verifique os logs no painel da Vercel
+### Erro 500 na autenticação
+- Verificar se `BLING_CLIENT_ID` e `BLING_CLIENT_SECRET` estão corretos
+- Verificar se a URL de callback está configurada no Bling
 
-### Erro 404 - Callback não encontrado
-- Verifique se a URL no Bling está correta
-- Deve ser exatamente: `https://johntech.vercel.app/auth/callback`
+### Webhooks não funcionam
+- Verificar se `BLING_WEBHOOK_SECRET` está configurado
+- Verificar se a URL está acessível publicamente
+- Verificar logs no Vercel
 
-### Erro de Banco de Dados
-- Verifique se `DATABASE_URL` está configurada
-- Execute os scripts SQL de criação das tabelas
-
-## URLs Importantes
-
-- **Site**: https://johntech.vercel.app
-- **Configuração**: https://johntech.vercel.app/configuracao-bling
-- **Dashboard**: https://johntech.vercel.app/dashboard
-- **Webhooks**: https://johntech.vercel.app/webhooks
-- **Callback OAuth**: https://johntech.vercel.app/auth/callback
-\`\`\`
-
-Agora vamos criar um script de pós-deploy para verificar se tudo funcionou:
+### Erro de banco
+- Verificar se `DATABASE_URL` está correto
+- Executar scripts de criação de tabelas

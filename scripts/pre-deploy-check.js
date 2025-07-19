@@ -1,60 +1,55 @@
 const fs = require("fs")
 const path = require("path")
 
-console.log("🚀 VERIFICAÇÃO PRÉ-DEPLOY")
-console.log("=".repeat(50))
+console.log("🔍 Verificando se está tudo pronto para deploy...\n")
 
-// Verifica se os arquivos essenciais existem
-const essentialFiles = [
+// Lista de arquivos essenciais
+const requiredFiles = [
   "app/api/auth/bling/route.ts",
   "app/api/auth/bling/callback/route.ts",
   "app/api/bling/webhooks/route.ts",
   "app/configuracao-bling/page.tsx",
   "lib/bling-auth.ts",
-  "lib/db.ts",
 ]
 
-let allFilesExist = true
+// Lista de variáveis de ambiente necessárias
+const requiredEnvVars = [
+  "BLING_CLIENT_ID",
+  "BLING_CLIENT_SECRET",
+  "BLING_WEBHOOK_SECRET",
+  "DATABASE_URL",
+  "NEXT_PUBLIC_BASE_URL",
+]
 
-console.log("\n📁 Verificando arquivos essenciais:")
-essentialFiles.forEach((file) => {
-  const exists = fs.existsSync(file)
+let allGood = true
+
+// Verificar arquivos
+console.log("📁 Verificando arquivos essenciais:")
+requiredFiles.forEach((file) => {
+  const exists = fs.existsSync(path.join(process.cwd(), file))
   console.log(`${exists ? "✅" : "❌"} ${file}`)
-  if (!exists) allFilesExist = false
+  if (!exists) allGood = false
 })
 
-// Verifica variáveis de ambiente necessárias
-console.log("\n🔧 Variáveis de ambiente necessárias:")
-const requiredEnvVars = ["BLING_CLIENT_ID", "BLING_CLIENT_SECRET", "DATABASE_URL", "NEXT_PUBLIC_BASE_URL"]
-
-const optionalEnvVars = ["BLING_WEBHOOK_SECRET"]
-
+console.log("\n🔐 Variáveis de ambiente necessárias:")
 requiredEnvVars.forEach((envVar) => {
   const exists = process.env[envVar]
-  console.log(`${exists ? "✅" : "❌"} ${envVar} ${exists ? "(configurado)" : "(FALTANDO)"}`)
+  console.log(`${exists ? "✅" : "❌"} ${envVar}`)
+  if (!exists) allGood = false
 })
 
-console.log("\n⚠️  Variáveis opcionais:")
-optionalEnvVars.forEach((envVar) => {
-  const exists = process.env[envVar]
-  console.log(`${exists ? "✅" : "⚠️ "} ${envVar} ${exists ? "(configurado)" : "(recomendado)"}`)
+console.log("\n📦 Verificando package.json...")
+const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"))
+const requiredDeps = ["next", "@vercel/postgres", "crypto"]
+requiredDeps.forEach((dep) => {
+  const exists = packageJson.dependencies[dep] || packageJson.devDependencies[dep]
+  console.log(`${exists ? "✅" : "❌"} ${dep}`)
+  if (!exists) allGood = false
 })
 
-console.log("\n📋 CHECKLIST PARA DEPLOY:")
-console.log("1. ✅ Código commitado no Git")
-console.log("2. ⚠️  Variáveis de ambiente configuradas no Vercel")
-console.log("3. ⚠️  URL de callback configurada no Bling")
-console.log("4. ⚠️  Deploy realizado")
-console.log("5. ⚠️  Testes executados")
-
-if (allFilesExist) {
-  console.log("\n🎉 Arquivos OK! Pronto para deploy.")
+if (allGood) {
+  console.log("\n🚀 Tudo pronto para deploy!")
+  console.log('Execute: git add . && git commit -m "feat: integração Bling completa" && git push')
 } else {
-  console.log("\n❌ Alguns arquivos estão faltando!")
+  console.log("\n❌ Alguns itens precisam ser corrigidos antes do deploy")
 }
-
-console.log("\n🚀 COMANDOS PARA DEPLOY:")
-console.log("git add .")
-console.log('git commit -m "Implementa integração completa com Bling"')
-console.log("git push origin main")
-console.log('\nOu use o botão "Deploy" no painel da Vercel')
