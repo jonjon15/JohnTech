@@ -38,11 +38,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(callbackUrl)
   }
 
-  // Verifica o state (opcional, mas recomendado para segurança)
-  if (state) {
-    console.log("State recebido:", state)
-  }
-
   try {
     // Troca o código pelo token de acesso
     const tokenResponse = await exchangeCodeForToken(code)
@@ -72,9 +67,16 @@ export async function GET(request: NextRequest) {
 
 async function exchangeCodeForToken(code: string) {
   try {
-    console.log("Trocando código por token...")
+    console.log("=== OAUTH DEBUG ===")
+    console.log("Client ID:", BLING_CLIENT_ID ? "✓ OK" : "✗ MISSING")
+    console.log("Client Secret:", BLING_CLIENT_SECRET ? "✓ OK" : "✗ MISSING")
     console.log("Redirect URI:", REDIRECT_URI)
 
+    if (!BLING_CLIENT_ID || !BLING_CLIENT_SECRET) {
+      throw new Error("Credenciais do Bling não configuradas")
+    }
+
+    // Codificar credenciais em Base64 conforme RFC 6749
     const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
 
     const formData = new URLSearchParams({
@@ -82,6 +84,8 @@ async function exchangeCodeForToken(code: string) {
       code: code,
       redirect_uri: REDIRECT_URI,
     })
+
+    console.log("Requisição para Bling OAuth...")
 
     const response = await fetch("https://www.bling.com.br/OAuth2/token", {
       method: "POST",
@@ -93,17 +97,19 @@ async function exchangeCodeForToken(code: string) {
       body: formData,
     })
 
+    console.log("Status da resposta:", response.status)
+
     if (!response.ok) {
       const errorText = await response.text()
-      console.error("Erro ao trocar código por token:", response.status, errorText)
+      console.error("Erro na resposta do Bling:", errorText)
       return {
         success: false,
-        error: `Falha na troca do token: ${response.status}`,
+        error: `Erro ${response.status}: ${errorText}`,
       }
     }
 
     const tokenData = await response.json()
-    console.log("Token obtido com sucesso")
+    console.log("✓ Token obtido com sucesso!")
 
     return {
       success: true,
