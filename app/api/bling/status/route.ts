@@ -1,48 +1,50 @@
 import { NextResponse } from "next/server"
+import { sql } from "@vercel/postgres"
 
 export async function GET() {
   try {
-    const requiredEnvVars = ["BLING_CLIENT_ID", "BLING_CLIENT_SECRET", "BLING_WEBHOOK_SECRET"]
+    // Teste de conexão com banco
+    const dbTest = await sql`SELECT NOW() as current_time`
 
-    const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
-
-    if (missingVars.length > 0) {
-      return NextResponse.json(
-        {
-          status: "error",
-          message: "Variáveis de ambiente faltando",
-          missing: missingVars,
-        },
-        { status: 500 },
-      )
+    // Verificar variáveis de ambiente
+    const envCheck = {
+      BLING_CLIENT_ID: !!process.env.BLING_CLIENT_ID,
+      BLING_CLIENT_SECRET: !!process.env.BLING_CLIENT_SECRET,
+      BLING_API_URL: !!process.env.BLING_API_URL,
+      DATABASE_URL: !!process.env.DATABASE_URL,
+      NEXT_PUBLIC_BASE_URL: !!process.env.NEXT_PUBLIC_BASE_URL,
     }
 
-    // Teste básico de conectividade com a API do Bling
-    const testUrl = "https://www.bling.com.br/Api/v3/oauth/authorize"
-
+    // Verificar se tabela users existe
+    let tableExists = false
     try {
-      const response = await fetch(testUrl, { method: "HEAD" })
-
-      return NextResponse.json({
-        status: "ok",
-        message: "Configuração Bling OK",
-        bling_api_accessible: response.ok,
-        timestamp: new Date().toISOString(),
-      })
+      await sql`SELECT 1 FROM users LIMIT 1`
+      tableExists = true
     } catch (error) {
-      return NextResponse.json({
-        status: "warning",
-        message: "Configuração OK, mas API Bling inacessível",
-        error: error instanceof Error ? error.message : "Erro desconhecido",
-        timestamp: new Date().toISOString(),
-      })
+      console.log("Tabela users não existe ou erro:", error)
     }
+
+    return NextResponse.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      database: {
+        connected: true,
+        current_time: dbTest.rows[0].current_time,
+        users_table_exists: tableExists,
+      },
+      environment: envCheck,
+      bling: {
+        api_url: process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3",
+        client_id_configured: !!process.env.BLING_CLIENT_ID,
+      },
+    })
   } catch (error) {
+    console.error("Status check error:", error)
     return NextResponse.json(
       {
         status: "error",
-        message: "Erro interno",
-        error: error instanceof Error ? error.message : "Erro desconhecido",
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )

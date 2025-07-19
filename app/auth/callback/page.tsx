@@ -9,6 +9,7 @@ import { CheckCircle, XCircle, Loader2 } from "lucide-react"
 export default function AuthCallbackPage() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading")
   const [message, setMessage] = useState("")
+  const [details, setDetails] = useState<any>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
 
@@ -17,6 +18,8 @@ export default function AuthCallbackPage() {
       const code = searchParams.get("code")
       const state = searchParams.get("state")
       const error = searchParams.get("error")
+
+      console.log("Callback params:", { code: code?.substring(0, 10) + "...", state, error })
 
       if (error) {
         setStatus("error")
@@ -31,6 +34,8 @@ export default function AuthCallbackPage() {
       }
 
       try {
+        console.log("Enviando código para /api/auth/bling/token...")
+
         const response = await fetch("/api/auth/bling/token", {
           method: "POST",
           headers: {
@@ -41,18 +46,23 @@ export default function AuthCallbackPage() {
 
         const data = await response.json()
 
+        console.log("Resposta do token endpoint:", { status: response.status, data })
+
         if (response.ok) {
           setStatus("success")
           setMessage("Autorização realizada com sucesso!")
+          setDetails(data)
 
           setTimeout(() => {
             router.push("/dashboard")
-          }, 2000)
+          }, 3000)
         } else {
           setStatus("error")
           setMessage(data.error || "Erro ao processar autorização")
+          setDetails(data.details || null)
         }
       } catch (error) {
+        console.error("Erro na requisição:", error)
         setStatus("error")
         setMessage("Erro de conexão")
       }
@@ -81,12 +91,28 @@ export default function AuthCallbackPage() {
 
           <p className="text-gray-300">{message}</p>
 
-          {status === "success" && <p className="text-sm text-gray-400">Redirecionando para o dashboard...</p>}
+          {status === "success" && (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-400">Redirecionando para o dashboard em 3 segundos...</p>
+              {details && (
+                <div className="text-xs text-gray-500">
+                  <p>Token válido por: {details.expires_in} segundos</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {status === "error" && (
-            <Button onClick={() => router.push("/configuracao-bling")} className="bg-green-600 hover:bg-green-700">
-              Tentar Novamente
-            </Button>
+            <div className="space-y-3">
+              {details && (
+                <div className="text-xs text-gray-400 bg-gray-900/50 p-2 rounded">
+                  <pre>{JSON.stringify(details, null, 2)}</pre>
+                </div>
+              )}
+              <Button onClick={() => router.push("/configuracao-bling")} className="bg-green-600 hover:bg-green-700">
+                Tentar Novamente
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
