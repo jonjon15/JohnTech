@@ -1,171 +1,246 @@
-import { Pool } from "pg"
+import { Pool, type PoolClient } from "pg"
 import type { BlingTokenData } from "@/types/bling"
 
-let pool: Pool | null = null
+declare global {
+  var _pgPool: Pool | undefined
+}
 
-/**
- * Retorna uma instância singleton do pool de conexões PostgreSQL
- */
 export function getPool(): Pool {
-  if (!pool) {
+  if (!global._pgPool) {
     const connectionString = process.env.DATABASE_URL
     if (!connectionString) {
-      throw new Error("DATABASE_URL environment variable is not set")
+      throw new Error("DATABASE_URL não definida nas variáveis de ambiente")
     }
 
-    pool = new Pool({
+    global._pgPool = new Pool({
       connectionString,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+      ssl:
+        connectionString.includes("localhost") || connectionString.includes("127.0.0.1")
+          ? false
+          : { rejectUnauthorized: false },
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
     })
 
-    pool.on("error", (err) => {
-      console.error("Unexpected error on idle client", err)
+    global._pgPool.on("error", (err) => {
+      console.error("🐘 Erro no pool PostgreSQL:", err)
     })
 
-    console.log("✅ Database pool initialized")
+    console.log("✅ Pool PostgreSQL inicializado")
   }
 
-  return pool
+  return global._pgPool
 }
 
-/**
- * Cria as tabelas necessárias se elas não existirem
- */
-export async function createTablesIfNotExists(): Promise<void> {
+// Interfaces para o banco local
+export interface Product {
+  id: number
+  bling_id?: number
+  nome: string
+  codigo: string
+  preco: number
+  descricao?: string
+  categoria?: string
+  unidade?: string
+  peso_bruto?: number
+  peso_liquido?: number
+  gtin?: string
+  gtinEmbalagem?: string
+  tipoProducao?: string
+  condicao?: number
+  freteGratis?: boolean
+  marca?: string
+  descricaoComplementar?: string
+  linkExterno?: string
+  observacoes?: string
+  descricaoEmbalagemDiscreta?: string
+  quantidade_minima?: number
+  descricao_curta?: string
+  situacao: string
+  tipo: string
+  formato: string
+  created_at?: Date
+  updated_at?: Date
+}
+
+export interface BlingToken {
+  id?: number
+  user_email: string
+  access_token: string
+  refresh_token: string
+  expires_at: Date
+  created_at?: Date
+  updated_at?: Date
+}
+
+export interface WebhookLog {
+  id?: number
+  event_type: string
+  resource_id: string
+  data: any
+  processed: boolean
+  created_at?: Date
+}
+
+// Função para normalizar produtos
+function normalizeProduct(row: any): Product {
+  return {
+    ...row,
+    preco: typeof row.preco === "string" ? Number.parseFloat(row.preco) : row.preco,
+  }
+}
+
+// Funções para produtos
+export async function getAllProducts(): Promise<Product[]> {
   const pool = getPool()
-
   try {
-    // Tabela de tokens do Bling
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS bling_tokens (
-        id SERIAL PRIMARY KEY,
-        user_email VARCHAR(255) UNIQUE NOT NULL,
-        access_token TEXT NOT NULL,
-        refresh_token TEXT NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `)
-
-    // Tabela de produtos
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS produtos (
-        id SERIAL PRIMARY KEY,
-        bling_id BIGINT UNIQUE NOT NULL,
-        nome VARCHAR(500) NOT NULL,
-        codigo VARCHAR(100),
-        preco DECIMAL(10,2),
-        tipo VARCHAR(1) DEFAULT 'P',
-        situacao VARCHAR(1) DEFAULT 'A',
-        descricao_curta TEXT,
-        descricao_complementar TEXT,
-        unidade VARCHAR(10),
-        peso_liquido DECIMAL(8,3),
-        peso_bruto DECIMAL(8,3),
-        gtin VARCHAR(20),
-        ncm VARCHAR(10),
-        categoria_id INTEGER,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `)
-
-    // Tabela de estoque
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS estoque (
-        id SERIAL PRIMARY KEY,
-        produto_id INTEGER REFERENCES produtos(id),
-        bling_produto_id BIGINT NOT NULL,
-        deposito_id INTEGER DEFAULT 1,
-        quantidade DECIMAL(10,3) DEFAULT 0,
-        saldo_virtual_total DECIMAL(10,3) DEFAULT 0,
-        saldo_fisico_total DECIMAL(10,3) DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(bling_produto_id, deposito_id)
-      )
-    `)
-
-    // Tabela de pedidos
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS pedidos (
-        id SERIAL PRIMARY KEY,
-        bling_id BIGINT UNIQUE NOT NULL,
-        numero VARCHAR(50) NOT NULL,
-        numero_loja VARCHAR(50),
-        data_pedido TIMESTAMP NOT NULL,
-        data_saida TIMESTAMP,
-        total_venda DECIMAL(10,2) NOT NULL,
-        situacao VARCHAR(50) DEFAULT 'Em aberto',
-        cliente_nome VARCHAR(255),
-        cliente_email VARCHAR(255),
-        observacoes TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `)
-
-    // Tabela de itens do pedido
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS pedido_itens (
-        id SERIAL PRIMARY KEY,
-        pedido_id INTEGER REFERENCES pedidos(id),
-        produto_id INTEGER REFERENCES produtos(id),
-        bling_produto_id BIGINT NOT NULL,
-        quantidade DECIMAL(10,3) NOT NULL,
-        valor_unitario DECIMAL(10,2) NOT NULL,
-        valor_total DECIMAL(10,2) NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `)
-
-    // Tabela de webhooks recebidos
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS webhook_events (
-        id SERIAL PRIMARY KEY,
-        event_type VARCHAR(100) NOT NULL,
-        event_data JSONB NOT NULL,
-        processed BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        processed_at TIMESTAMP
-      )
-    `)
-
-    // Tabela de logs de sincronização
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS sync_logs (
-        id SERIAL PRIMARY KEY,
-        sync_type VARCHAR(50) NOT NULL,
-        status VARCHAR(20) NOT NULL,
-        message TEXT,
-        records_processed INTEGER DEFAULT 0,
-        errors_count INTEGER DEFAULT 0,
-        started_at TIMESTAMP DEFAULT NOW(),
-        completed_at TIMESTAMP
-      )
-    `)
-
-    console.log("✅ All database tables created/verified successfully")
+    const result = await pool.query(`SELECT * FROM bling_products ORDER BY nome`)
+    return result.rows.map(normalizeProduct)
   } catch (error) {
-    console.error("❌ Error creating database tables:", error)
+    console.error("Erro ao buscar produtos:", error)
     throw error
   }
 }
 
-/**
- * Função para obter tokens do Bling (alias para compatibilidade)
- */
+export async function getProductById(id: number): Promise<Product | null> {
+  const pool = getPool()
+  try {
+    const result = await pool.query(`SELECT * FROM bling_products WHERE id = $1`, [id])
+    if (result.rows.length === 0) {
+      return null
+    }
+    return normalizeProduct(result.rows[0])
+  } catch (error) {
+    console.error("Erro ao buscar produto por ID:", error)
+    throw error
+  }
+}
+
+export async function getProductByBlingId(blingId: number): Promise<Product | null> {
+  const pool = getPool()
+  try {
+    const result = await pool.query(`SELECT * FROM bling_products WHERE bling_id = $1`, [blingId])
+    if (result.rows.length === 0) {
+      return null
+    }
+    return normalizeProduct(result.rows[0])
+  } catch (error) {
+    console.error("Erro ao buscar produto por Bling ID:", error)
+    throw error
+  }
+}
+
+export async function createProduct(product: Omit<Product, "id" | "created_at" | "updated_at">): Promise<Product> {
+  const pool = getPool()
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO bling_products (
+        bling_id, nome, codigo, preco, descricao, categoria, unidade,
+        peso_bruto, peso_liquido, gtin, gtinEmbalagem, tipoProducao,
+        condicao, freteGratis, marca, descricaoComplementar, linkExterno,
+        observacoes, descricaoEmbalagemDiscreta, quantidade_minima, 
+        descricao_curta, situacao, tipo, formato
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 
+        $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
+      )
+      RETURNING *
+    `,
+      [
+        product.bling_id || null,
+        product.nome,
+        product.codigo,
+        product.preco,
+        product.descricao || null,
+        product.categoria || null,
+        product.unidade || null,
+        product.peso_bruto || null,
+        product.peso_liquido || null,
+        product.gtin || null,
+        product.gtinEmbalagem || null,
+        product.tipoProducao || null,
+        product.condicao || null,
+        product.freteGratis || false,
+        product.marca || null,
+        product.descricaoComplementar || null,
+        product.linkExterno || null,
+        product.observacoes || null,
+        product.descricaoEmbalagemDiscreta || null,
+        product.quantidade_minima || null,
+        product.descricao_curta || null,
+        product.situacao,
+        product.tipo,
+        product.formato,
+      ],
+    )
+    return normalizeProduct(result.rows[0])
+  } catch (error) {
+    console.error("Erro ao criar produto:", error)
+    throw error
+  }
+}
+
+export async function updateProduct(id: number, product: Partial<Product>): Promise<Product | null> {
+  const pool = getPool()
+  try {
+    const fields = []
+    const values = []
+    let paramCount = 1
+
+    Object.entries(product).forEach(([key, value]) => {
+      if (key !== "id" && key !== "created_at" && key !== "updated_at" && value !== undefined) {
+        fields.push(`${key} = $${paramCount}`)
+        values.push(value)
+        paramCount++
+      }
+    })
+
+    if (fields.length === 0) {
+      throw new Error("Nenhum campo para atualizar")
+    }
+
+    fields.push(`updated_at = NOW()`)
+    values.push(id)
+
+    const query = `
+      UPDATE bling_products
+      SET ${fields.join(", ")}
+      WHERE id = $${paramCount}
+      RETURNING *
+    `
+
+    const result = await pool.query(query, values)
+
+    if (result.rows.length === 0) {
+      return null
+    }
+
+    return normalizeProduct(result.rows[0])
+  } catch (error) {
+    console.error("Erro ao atualizar produto:", error)
+    throw error
+  }
+}
+
+export async function deleteProduct(id: number): Promise<boolean> {
+  const pool = getPool()
+  try {
+    const result = await pool.query(`DELETE FROM bling_products WHERE id = $1`, [id])
+    return result.rowCount !== null && result.rowCount > 0
+  } catch (error) {
+    console.error("Erro ao deletar produto:", error)
+    throw error
+  }
+}
+
+// Funções para tokens
 export async function getBlingTokens(userEmail: string): Promise<BlingTokenData | null> {
   const pool = getPool()
   try {
     const result = await pool.query(
-      `SELECT access_token, refresh_token, expires_at
-       FROM bling_tokens
-       WHERE user_email = $1`,
+      `SELECT access_token, refresh_token, expires_at FROM bling_tokens WHERE user_email = $1`,
       [userEmail],
     )
 
@@ -182,10 +257,161 @@ export async function getBlingTokens(userEmail: string): Promise<BlingTokenData 
     }
     return null
   } catch (error) {
-    console.error("❌ Error fetching Bling tokens:", error)
+    console.error("Erro ao buscar tokens Bling:", error)
     return null
   }
 }
 
-// Export default do pool para compatibilidade
-export default getPool()
+// Funções para webhooks
+export async function logWebhook(eventType: string, resourceId: string, data: any): Promise<void> {
+  const pool = getPool()
+  try {
+    await pool.query(`INSERT INTO webhook_logs (event_type, resource_id, data, processed) VALUES ($1, $2, $3, false)`, [
+      eventType,
+      resourceId,
+      JSON.stringify(data),
+    ])
+  } catch (error) {
+    console.error("Erro ao registrar webhook:", error)
+    throw error
+  }
+}
+
+export async function getWebhookLogs(limit = 50): Promise<WebhookLog[]> {
+  const pool = getPool()
+  try {
+    const result = await pool.query(`SELECT * FROM webhook_logs ORDER BY created_at DESC LIMIT $1`, [limit])
+    return result.rows
+  } catch (error) {
+    console.error("Erro ao buscar logs de webhook:", error)
+    throw error
+  }
+}
+
+// Funções de utilidade
+export async function testConnection(): Promise<{ success: boolean; timestamp?: Date; error?: string }> {
+  const pool = getPool()
+  try {
+    const client = await pool.connect()
+    const result = await client.query("SELECT NOW()")
+    client.release()
+    return { success: true, timestamp: result.rows[0].now }
+  } catch (error) {
+    console.error("Erro na conexão com o banco:", error)
+    return { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" }
+  }
+}
+
+export async function queryWithRetry(text: string, params?: any[], maxRetries = 3) {
+  const pool = getPool()
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await pool.query(text, params)
+      return result
+    } catch (error) {
+      lastError = error as Error
+      console.error(`Tentativa ${attempt}/${maxRetries} falhou:`, error)
+
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
+      }
+    }
+  }
+
+  throw lastError
+}
+
+export async function withTransaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await getPool().connect()
+
+  try {
+    await client.query("BEGIN")
+    const result = await callback(client)
+    await client.query("COMMIT")
+    return result
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function createTablesIfNotExists(): Promise<void> {
+  const pool = getPool()
+  try {
+    // Tabela de produtos
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bling_products (
+        id SERIAL PRIMARY KEY,
+        bling_id INTEGER UNIQUE,
+        nome VARCHAR(255) NOT NULL,
+        codigo VARCHAR(100) NOT NULL UNIQUE,
+        preco DECIMAL(10,2) NOT NULL DEFAULT 0,
+        descricao TEXT,
+        categoria VARCHAR(100),
+        unidade VARCHAR(10),
+        peso_bruto DECIMAL(8,3),
+        peso_liquido DECIMAL(8,3),
+        gtin VARCHAR(20),
+        gtinEmbalagem VARCHAR(20),
+        tipoProducao VARCHAR(1),
+        condicao INTEGER,
+        freteGratis BOOLEAN DEFAULT false,
+        marca VARCHAR(100),
+        descricaoComplementar TEXT,
+        linkExterno VARCHAR(500),
+        observacoes TEXT,
+        descricaoEmbalagemDiscreta TEXT,
+        quantidade_minima DECIMAL(10,3),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        descricao_curta TEXT,
+        situacao VARCHAR(50),
+        tipo VARCHAR(50),
+        formato VARCHAR(50)
+      )
+    `)
+
+    // Tabela de tokens
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bling_tokens (
+        id SERIAL PRIMARY KEY,
+        user_email VARCHAR(255) UNIQUE NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+
+    // Tabela de webhooks
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS webhook_logs (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(100) NOT NULL,
+        resource_id VARCHAR(100) NOT NULL,
+        data JSONB NOT NULL,
+        processed BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+
+    console.log("✅ Tabelas criadas/verificadas com sucesso")
+  } catch (error) {
+    console.error("Erro ao criar tabelas:", error)
+    throw error
+  }
+}
+
+// Aliases para compatibilidade
+export { testConnection as checkDatabaseConnection }
+export { createTablesIfNotExists as initializeTables }
+export { logWebhook as createWebhookLog }
+
+// Export default
+const poolInstance = getPool()
+export default poolInstance

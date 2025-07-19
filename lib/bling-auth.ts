@@ -12,9 +12,6 @@ if (!BLING_CLIENT_ID || !BLING_CLIENT_SECRET || !NEXT_PUBLIC_BASE_URL) {
   )
 }
 
-/**
- * Constrói a URL de autorização do Bling para o fluxo OAuth 2.0
- */
 export function getBlingAuthUrl(): string {
   if (!BLING_CLIENT_ID || !NEXT_PUBLIC_BASE_URL) {
     throw new Error("BLING_CLIENT_ID ou NEXT_PUBLIC_BASE_URL não definidos para autenticação Bling.")
@@ -26,15 +23,12 @@ export function getBlingAuthUrl(): string {
   authUrl.searchParams.set("response_type", "code")
   authUrl.searchParams.set("client_id", BLING_CLIENT_ID)
   authUrl.searchParams.set("redirect_uri", redirectUri)
-  authUrl.searchParams.set("state", crypto.randomUUID()) // Estado único para CSRF protection
+  authUrl.searchParams.set("state", crypto.randomUUID())
   authUrl.searchParams.set("scope", "produtos,pedidos,estoques,contatos,vendas,compras,financeiro")
 
   return authUrl.toString()
 }
 
-/**
- * Retorna a URI de redirecionamento configurada para o Bling OAuth
- */
 export function getBlingAuthRedirectUri(): string {
   if (!NEXT_PUBLIC_BASE_URL) {
     throw new Error("NEXT_PUBLIC_BASE_URL não definida para redirect URI do Bling.")
@@ -42,9 +36,6 @@ export function getBlingAuthRedirectUri(): string {
   return `${NEXT_PUBLIC_BASE_URL}/api/auth/bling/callback`
 }
 
-/**
- * Troca o código de autorização por tokens de acesso e refresh do Bling
- */
 export async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<BlingTokenData | null> {
   if (!BLING_CLIENT_ID || !BLING_CLIENT_SECRET) {
     throw new Error("BLING_CLIENT_ID ou BLING_CLIENT_SECRET não definidos para troca de tokens Bling.")
@@ -71,7 +62,6 @@ export async function exchangeCodeForTokens(code: string, redirectUri: string): 
 
     const responseText = await response.text()
     console.log("📋 Response status:", response.status)
-    console.log("📋 Response body:", responseText)
 
     if (!response.ok) {
       console.error("❌ Erro ao trocar código por tokens:", response.status, responseText)
@@ -97,9 +87,6 @@ export async function exchangeCodeForTokens(code: string, redirectUri: string): 
   }
 }
 
-/**
- * Refreshes o token de acesso do Bling usando o refresh token
- */
 export async function refreshAccessToken(
   userEmail: string,
   currentRefreshToken: string,
@@ -130,7 +117,6 @@ export async function refreshAccessToken(
       const errorData = await response.text()
       console.error("❌ Erro ao refrescar token:", response.status, errorData)
 
-      // Se o refresh token for inválido, limpe os tokens
       if (response.status === 400 || response.status === 401) {
         console.warn(`🧹 Refresh token inválido para ${userEmail}. Limpando tokens.`)
         await clearTokens(userEmail)
@@ -157,9 +143,6 @@ export async function refreshAccessToken(
   }
 }
 
-/**
- * Salva ou atualiza os tokens do Bling para um usuário específico no banco de dados
- */
 export async function saveTokens(userEmail: string, tokenData: BlingTokenData): Promise<boolean> {
   const pool = getPool()
   try {
@@ -183,16 +166,11 @@ export async function saveTokens(userEmail: string, tokenData: BlingTokenData): 
   }
 }
 
-/**
- * Obtém os tokens do Bling para um usuário específico
- */
 export async function getTokens(userEmail: string): Promise<BlingTokenData | null> {
   const pool = getPool()
   try {
     const result = await pool.query(
-      `SELECT access_token, refresh_token, expires_at
-       FROM bling_tokens
-       WHERE user_email = $1`,
+      `SELECT access_token, refresh_token, expires_at FROM bling_tokens WHERE user_email = $1`,
       [userEmail],
     )
 
@@ -214,10 +192,6 @@ export async function getTokens(userEmail: string): Promise<BlingTokenData | nul
   }
 }
 
-/**
- * Obtém um token de acesso Bling válido para um usuário
- * Tenta refrescar se o token existente estiver expirado ou próximo de expirar
- */
 export async function getValidAccessToken(userEmail: string, forceRefresh = false): Promise<string | null> {
   const tokens = await getTokens(userEmail)
 
@@ -248,9 +222,6 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
   return tokens.accessToken
 }
 
-/**
- * Limpa os tokens do Bling para um usuário específico no banco de dados
- */
 export async function clearTokens(userEmail: string): Promise<boolean> {
   const pool = getPool()
   try {

@@ -1,14 +1,39 @@
 /**
- * Tipos baseados na documentação oficial do Bling
+ * Tipos baseados na documentação oficial do Bling API v3
  * https://developer.bling.com.br/referencia
  */
 
-// Produto
+// Token Data para OAuth 2.0
+export interface BlingTokenData {
+  accessToken: string
+  refreshToken: string
+  expiresIn: number
+  tokenType: string
+  scope: string
+  expiresAt: string
+}
+
+// Estrutura de erro da API Bling
+export interface BlingApiError {
+  code: string
+  message: string
+  details?: any
+  statusCode: number
+}
+
+// Resposta padronizada da API
+export interface BlingApiResponse<T> {
+  success: boolean
+  data: T | null
+  error: BlingApiError | null
+}
+
+// Produto conforme documentação Bling
 export interface BlingProduct {
   id: number
   nome: string
-  codigo: string
-  preco: number
+  codigo?: string
+  preco?: number
   tipo?: "P" | "S" // P=Produto, S=Serviço
   situacao?: "A" | "I" // A=Ativo, I=Inativo
   formato?: "S" | "V" | "U" // S=Simples, V=Variação, U=Unidade
@@ -22,12 +47,13 @@ export interface BlingProduct {
   gtin?: string
   gtinEmbalagem?: string
   tipoProducao?: "P" | "T" // P=Própria, T=Terceiros
-  condicao?: 0 | 1 | 2 | 3 | 4 | 5 // 0=Não especificado, 1=Novo, etc.
+  condicao?: 0 | 1 | 2 | 3 | 4 | 5
   freteGratis?: boolean
   marca?: string
   descricaoFornecedor?: string
   categoria?: {
     id: number
+    descricao?: string
   }
   estoque?: {
     minimo?: number
@@ -36,7 +62,7 @@ export interface BlingProduct {
     localizacao?: string
   }
   tributacao?: {
-    origem?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+    origem?: number
     nfci?: string
     ncm?: string
     cest?: string
@@ -44,62 +70,24 @@ export interface BlingProduct {
     spedTipoItem?: string
     codigoItem?: string
     percentualTributos?: number
-    valorBaseStRetencao?: number
-    valorStRetencao?: number
-    valorICMSSubstituto?: number
-    codigoBeneficioFiscal?: string
   }
+  imagens?: Array<{
+    linkExterno: string
+  }>
   variacao?: {
     nome: string
     ordem: number
     produtoPai: {
       id: number
     }
-    variacao: {
+    variacao: Array<{
       nome: string
       valor: string
-    }[]
-  }
-  imagens?: {
-    linkExterno: string
-  }[]
-}
-
-// Categoria
-export interface BlingCategory {
-  id: number
-  descricao: string
-  categoriaPai?: {
-    id: number
+    }>
   }
 }
 
-// Estoque
-export interface BlingStock {
-  id: number
-  produtoId: number
-  depositoId: number
-  quantidade: number
-  saldoVirtualTotal?: number
-  saldoFisicoTotal?: number
-  saldoVirtualDisponivel?: number
-}
-
-export interface StockUpdate {
-  produto: {
-    id: number
-  }
-  deposito: {
-    id: number
-  }
-  operacao: "B" | "S" | "T" // B=Balanço, S=Saída, T=Transferência
-  preco: number
-  custo: number
-  quantidade: number
-  observacoes?: string
-}
-
-// Pedido
+// Pedido conforme documentação Bling
 export interface BlingOrder {
   id: number
   numero: string
@@ -120,7 +108,7 @@ export interface BlingOrder {
   contato: {
     id?: number
     nome: string
-    tipoPessoa?: "F" | "J" // F=Física, J=Jurídica
+    tipoPessoa?: "F" | "J"
     contribuinte?: 0 | 1 | 2 | 9
     endereco?: BlingAddress
     telefone?: string
@@ -133,7 +121,7 @@ export interface BlingOrder {
     transportadora?: {
       id: number
     }
-    fretePorConta?: 0 | 1 | 2 // 0=Contratação do frete por conta do remetente (CIF), 1=Contratação do frete por conta do destinatário (FOB), 2=Contratação do frete por conta de terceiros
+    fretePorConta?: 0 | 1 | 2
     frete?: number
     quantidadeVolumes?: number
     pesoBruto?: number
@@ -212,24 +200,48 @@ export interface BlingContact {
       nomeFantasia?: string
     }
   }
-  tipos?: Array<"C" | "F" | "T" | "V"> // C=Cliente, F=Fornecedor, T=Transportadora, V=Vendedor
+  tipos?: Array<"C" | "F" | "T" | "V">
 }
 
-// Requests
+// Estoque
+export interface BlingStock {
+  id: number
+  produtoId: number
+  depositoId: number
+  quantidade: number
+  saldoVirtualTotal?: number
+  saldoFisicoTotal?: number
+  saldoVirtualDisponivel?: number
+}
+
+// Categoria
+export interface BlingCategory {
+  id: number
+  descricao: string
+  categoriaPai?: {
+    id: number
+  }
+}
+
+// Webhook Event
+export interface BlingWebhookEvent {
+  evento?: {
+    tipo: string
+    data?: string
+  }
+  retorno?: {
+    id?: number | string
+    [key: string]: any
+  }
+  [key: string]: any
+}
+
+// Requests para criação/atualização
 export interface CreateProductRequest extends Omit<BlingProduct, "id"> {}
 export interface UpdateProductRequest extends Partial<Omit<BlingProduct, "id">> {}
 export interface CreateOrderRequest extends Omit<BlingOrder, "id" | "numero"> {}
 
-// Token Data
-export interface BlingTokenData {
-  accessToken: string
-  refreshToken: string
-  expiresIn: number
-  tokenType: string
-  scope: string
-  expiresAt: string // Adicionado para armazenar a data de expiração calculada
-}
-
+// Token armazenado no banco
 export interface StoredToken {
   user_email: string
   access_token: string
@@ -237,34 +249,4 @@ export interface StoredToken {
   expires_at: Date
   created_at: Date
   updated_at: Date
-}
-
-// API Error
-export interface BlingApiError {
-  code: string
-  message: string
-  details?: any
-  statusCode: number
-}
-
-// API Response
-export interface BlingApiResponse<T> {
-  success: boolean
-  data: T | null
-  error: BlingApiError | null
-}
-
-// Webhooks Bling
-export interface BlingWebhookEvent {
-  evento: {
-    tipo: string // Ex: "vendas", "estoque"
-    data: string // Data e hora do evento
-  }
-  retorno: {
-    id: number // ID do recurso (ex: ID da venda, ID do produto)
-    // Outros dados específicos do recurso
-    [key: string]: any
-  }
-  // Outros campos do webhook
-  [key: string]: any
 }

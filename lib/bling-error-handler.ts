@@ -1,8 +1,5 @@
 import type { BlingApiError } from "@/types/bling"
 
-/**
- * Cria uma resposta padronizada para a API Bling
- */
 export function createBlingApiResponse<T>(
   success: boolean,
   data: T | null,
@@ -11,9 +8,6 @@ export function createBlingApiResponse<T>(
   return { success, data, error }
 }
 
-/**
- * Normaliza e trata erros da API Bling ou erros internos
- */
 export function handleBlingApiError(rawError: any): BlingApiError {
   let code = "UNKNOWN_ERROR"
   let message = "Ocorreu um erro inesperado."
@@ -21,30 +15,23 @@ export function handleBlingApiError(rawError: any): BlingApiError {
   let statusCode = 500
 
   if (rawError && typeof rawError === "object") {
-    // Erros retornados diretamente pela API Bling
     if ("error" in rawError && typeof rawError.error === "object" && rawError.error !== null) {
       const blingError = rawError.error
       code = blingError.code || "BLING_API_ERROR"
       message = blingError.message || "Erro retornado pela API Bling."
       statusCode = rawError.statusCode || 500
       details = blingError
-    }
-    // Erros padronizados internamente
-    else if ("statusCode" in rawError && "message" in rawError) {
+    } else if ("statusCode" in rawError && "message" in rawError) {
       statusCode = rawError.statusCode
       message = rawError.message
       code = rawError.code || `HTTP_${statusCode}`
       details = rawError.details || rawError
-    }
-    // Erros de JavaScript
-    else if (rawError instanceof Error) {
+    } else if (rawError instanceof Error) {
       code = "INTERNAL_SERVER_ERROR"
       message = rawError.message
       statusCode = 500
       details = rawError.stack || rawError.toString()
-    }
-    // Erros específicos do Bling com estrutura diferente
-    else if ("errors" in rawError && Array.isArray(rawError.errors)) {
+    } else if ("errors" in rawError && Array.isArray(rawError.errors)) {
       const firstError = rawError.errors[0]
       code = firstError?.code || "BLING_VALIDATION_ERROR"
       message = firstError?.message || "Erro de validação do Bling"
@@ -60,9 +47,6 @@ export function handleBlingApiError(rawError: any): BlingApiError {
   return { code, message, details, statusCode }
 }
 
-/**
- * Registra uma chamada à API Bling no console com formatação melhorada
- */
 export function logBlingApiCall(
   requestId: string,
   method: string,
@@ -92,11 +76,9 @@ export function logBlingApiCall(
   }
 }
 
-// Aliases para compatibilidade
 export { handleBlingApiError as handleBlingError }
 export { logBlingApiCall as logRequest }
 
-// Funções utilitárias adicionais
 export function isBlingRateLimitError(error: BlingApiError): boolean {
   return error.statusCode === 429 || error.code === "42901"
 }
@@ -110,7 +92,6 @@ export function isBlingValidationError(error: BlingApiError): boolean {
 }
 
 export function getBlingErrorMessage(error: BlingApiError): string {
-  // Mensagens mais amigáveis para erros comuns
   const friendlyMessages: Record<string, string> = {
     "40001": "Parâmetros inválidos fornecidos",
     "40101": "Token de acesso inválido ou expirado",
@@ -122,4 +103,10 @@ export function getBlingErrorMessage(error: BlingApiError): string {
   }
 
   return friendlyMessages[error.code] || error.message
+}
+
+export default {
+  handleBlingApiError,
+  createBlingApiResponse,
+  logBlingApiCall,
 }

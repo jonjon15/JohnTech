@@ -1,24 +1,33 @@
 import { NextResponse } from "next/server"
-import { checkDatabaseConnection } from "@/lib/db"
+import { testConnection, createTablesIfNotExists } from "@/lib/db"
 
 export async function GET() {
   try {
-    const connected = await checkDatabaseConnection()
+    const connectionTest = await testConnection()
+
+    if (connectionTest.success) {
+      await createTablesIfNotExists()
+    }
 
     return NextResponse.json({
-      success: true,
-      connected,
-      timestamp: new Date().toISOString(),
-      database: "PostgreSQL (Vercel)",
+      database: {
+        connected: connectionTest.success,
+        timestamp: connectionTest.timestamp,
+        error: connectionTest.error,
+      },
+      tables: {
+        created: connectionTest.success,
+      },
+      environment: {
+        databaseUrl: !!process.env.DATABASE_URL,
+        nodeEnv: process.env.NODE_ENV,
+      },
     })
   } catch (error: any) {
-    console.error("Erro ao verificar status do banco:", error)
-
     return NextResponse.json(
       {
-        success: false,
-        connected: false,
-        error: error.message,
+        error: "Database status check failed",
+        message: error.message,
         timestamp: new Date().toISOString(),
       },
       { status: 500 },

@@ -4,10 +4,6 @@ import type { BlingApiResponse } from "@/types/bling"
 
 const BLING_API_BASE_URL = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
 
-/**
- * Função genérica para fazer requisições à API do Bling
- * Inclui tratamento de autenticação, refresh automático de tokens e tratamento de erros
- */
 export async function makeRequest<T>(
   userEmail: string,
   endpoint: string,
@@ -55,10 +51,9 @@ export async function makeRequest<T>(
     const elapsedTime = Date.now() - startTime
     logBlingApiCall(requestId, method, url, response.status, responseData, elapsedTime)
 
-    // Se recebeu 401 e ainda não tentou retry, tenta refresh do token
     if (response.status === 401 && retryCount === 0) {
       console.log(`🔄 [${requestId}] Token expirado, tentando refresh...`)
-      const newToken = await getValidAccessToken(userEmail, true) // Force refresh
+      const newToken = await getValidAccessToken(userEmail, true)
       if (newToken) {
         return makeRequest(userEmail, endpoint, method, body, retryCount + 1)
       }
@@ -83,9 +78,6 @@ export async function makeRequest<T>(
   }
 }
 
-/**
- * Cliente simplificado para a API Bling
- */
 export async function getBlingApiClient(userEmail: string) {
   return {
     get: (endpoint: string) => makeRequest(userEmail, endpoint, "GET"),
@@ -95,9 +87,6 @@ export async function getBlingApiClient(userEmail: string) {
   }
 }
 
-/**
- * Funções específicas para endpoints do Bling
- */
 export class BlingApiService {
   userEmail: string
 
@@ -105,7 +94,6 @@ export class BlingApiService {
     this.userEmail = userEmail
   }
 
-  // Produtos
   async getProdutos(page = 1, limit = 100) {
     return makeRequest(this.userEmail, `/produtos?pagina=${page}&limite=${limit}`, "GET")
   }
@@ -122,7 +110,6 @@ export class BlingApiService {
     return makeRequest(this.userEmail, `/produtos/${id}`, "PUT", produto)
   }
 
-  // Pedidos
   async getPedidos(page = 1, limit = 100) {
     return makeRequest(this.userEmail, `/pedidos?pagina=${page}&limite=${limit}`, "GET")
   }
@@ -135,7 +122,6 @@ export class BlingApiService {
     return makeRequest(this.userEmail, "/pedidos", "POST", pedido)
   }
 
-  // Estoque
   async getEstoque(page = 1, limit = 100) {
     return makeRequest(this.userEmail, `/estoques?pagina=${page}&limite=${limit}`, "GET")
   }
@@ -144,7 +130,6 @@ export class BlingApiService {
     return makeRequest(this.userEmail, `/estoques/${produtoId}`, "PUT", estoque)
   }
 
-  // Contatos
   async getContatos(page = 1, limit = 100) {
     return makeRequest(this.userEmail, `/contatos?pagina=${page}&limite=${limit}`, "GET")
   }
@@ -157,12 +142,10 @@ export class BlingApiService {
     return makeRequest(this.userEmail, "/contatos", "POST", contato)
   }
 
-  // Categorias
   async getCategorias() {
     return makeRequest(this.userEmail, "/categorias", "GET")
   }
 
-  // Situações
   async getSituacoes() {
     return makeRequest(this.userEmail, "/situacoes", "GET")
   }

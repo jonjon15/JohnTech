@@ -2,9 +2,6 @@ import { type NextRequest, NextResponse } from "next/server"
 import { handleWebhookEvent, validateWebhookSignature } from "@/lib/webhook-handler"
 import type { BlingWebhookEvent } from "@/types/bling"
 
-/**
- * Endpoint para receber webhooks do Bling
- */
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID()
   const startTime = Date.now()
@@ -12,14 +9,12 @@ export async function POST(request: NextRequest) {
   try {
     console.log(`📨 [${requestId}] Webhook recebido do Bling`)
 
-    // Lê o corpo da requisição
     const body = await request.text()
     const signature = request.headers.get("x-bling-signature") || ""
 
     console.log(`📋 [${requestId}] Signature:`, signature ? "presente" : "ausente")
     console.log(`📋 [${requestId}] Body length:`, body.length)
 
-    // Valida a assinatura do webhook (se configurada)
     if (process.env.BLING_WEBHOOK_SECRET && signature) {
       const isValid = validateWebhookSignature(body, signature)
       if (!isValid) {
@@ -29,7 +24,6 @@ export async function POST(request: NextRequest) {
       console.log(`✅ [${requestId}] Assinatura do webhook válida`)
     }
 
-    // Parse do JSON
     let webhookData: BlingWebhookEvent
     try {
       webhookData = JSON.parse(body)
@@ -41,7 +35,6 @@ export async function POST(request: NextRequest) {
     console.log(`📋 [${requestId}] Evento:`, webhookData.evento?.tipo)
     console.log(`📋 [${requestId}] ID do recurso:`, webhookData.retorno?.id)
 
-    // Processa o evento
     const processed = await handleWebhookEvent(webhookData)
 
     const elapsedTime = Date.now() - startTime
@@ -85,9 +78,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Endpoint para verificar o status dos webhooks
- */
 export async function GET() {
   try {
     return NextResponse.json({
