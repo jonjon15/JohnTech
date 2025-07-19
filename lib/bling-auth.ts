@@ -4,6 +4,37 @@ import type { BlingTokenData, StoredToken } from "@/types/bling"
 const BLING_API_URL = "https://www.bling.com.br/Api/v3"
 const CLIENT_ID = process.env.BLING_CLIENT_ID!
 const CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
+const NEXT_PUBLIC_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!
+
+/**
+ * Retorna a URL de redirecionamento para o Bling OAuth.
+ * Deve ser a mesma configurada no painel do Bling.
+ */
+export function getBlingAuthRedirectUri(): string {
+  return `${NEXT_PUBLIC_BASE_URL}/api/auth/bling/callback`
+}
+
+/**
+ * Gera a URL de autorização do Bling para iniciar o fluxo OAuth.
+ */
+export function getBlingAuthUrl(): string {
+  const redirectUri = getBlingAuthRedirectUri()
+  const scope = "produtos,pedidos,estoques,contatos" // Defina os escopos necessários
+  const state = Math.random().toString(36).substring(2, 15) // Gerar um estado para segurança CSRF
+
+  // Em uma aplicação real, você salvaria o 'state' em uma sessão ou cookie
+  // para validá-lo no callback.
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: CLIENT_ID,
+    redirect_uri: redirectUri,
+    state: state,
+    scope: scope,
+  })
+
+  return `${BLING_API_URL}/oauth/authorize?${params.toString()}`
+}
 
 /**
  * Salva ou atualiza os tokens de autenticação no banco de dados.

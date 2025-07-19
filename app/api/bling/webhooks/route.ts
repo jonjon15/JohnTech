@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createWebhookLog } from "@/lib/db"
+import { createWebhookLog } from "@/lib/db" // Assumindo que createWebhookLog existe em lib/db
 
 export async function GET() {
   return NextResponse.json({
@@ -41,6 +41,8 @@ export async function POST(request: NextRequest) {
     console.log(`[${requestId}] Evento: ${eventType}, Resource: ${resourceId}`)
 
     // Salvar log do webhook
+    // Certifique-se de que createWebhookLog está implementado em lib/db.ts
+    // ou mova esta lógica para um handler de webhook mais específico.
     await createWebhookLog(eventType, payload, resourceId)
 
     // Processar diferentes tipos de eventos

@@ -42,14 +42,14 @@ const nextConfig = {
       net: false,
       tls: false,
     }
-    
+
     return config
   },
   // Configurações de build
   output: 'standalone',
   poweredByHeader: false,
   compress: true,
-  
+
   // Configurações de redirecionamento
   async redirects() {
     return [
@@ -60,7 +60,7 @@ const nextConfig = {
       },
     ]
   },
-  
+
   // Configurações de rewrite
   async rewrites() {
     return [
