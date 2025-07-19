@@ -1,88 +1,188 @@
 export interface BlingError {
-  type: string
+  code: string
   message: string
-  code?: string
   details?: any
+  status?: number
+}
+
+export interface BlingApiResponse<T = any> {
+  success: boolean
+  data?: T
+  error?: BlingError
+  meta?: {
+    elapsed_time: number
+    timestamp: string
+    request_id?: string
+  }
 }
 
 export class BlingApiError extends Error {
-  public readonly type: string
-  public readonly code?: string
-  public readonly details?: any
+  public code: string
+  public status: number
+  public details?: any
 
-  constructor(type: string, message: string, code?: string, details?: any) {
+  constructor(message: string, code = "UNKNOWN_ERROR", status = 500, details?: any) {
     super(message)
     this.name = "BlingApiError"
-    this.type = type
     this.code = code
+    this.status = status
     this.details = details
   }
 }
 
-export function handleBlingApiError(response: Response, data: any): BlingApiError {
-  const status = response.status
+export function handleBlingApiError(error: any, context = "API_CALL"): BlingApiResponse {
+  console.error(`❌ Erro no contexto ${context}:`, error)
 
-  switch (status) {
-    case 400:
-      if (data.error?.type === "validation_error") {
-        return new BlingApiError("validation_error", "Dados de entrada inválidos", data.error.code, data.error.fields)
-      }
-      if (data.error?.type === "missing_required_field_error") {
-        return new BlingApiError(
-          "missing_required_field_error",
-          "Campo obrigatório não informado",
-          data.error.code,
-          data.error.field,
-        )
-      }
-      return new BlingApiError("bad_request", "Requisição inválida", undefined, data)
+  // Timeout errors
+  if (error.name === "AbortError") {
+    return {
+      success: false,
+      error: {
+        code: "TIMEOUT_ERROR",
+        message: "Operação cancelada por timeout",
+        status: 408,
+        details: { context, timeout: true },
+      },
+    }
+  }
 
-    case 401:
-      return new BlingApiError("unauthorized", "Token de acesso inválido ou expirado")
+  // Network errors
+  if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
+    return {
+      success: false,
+      error: {
+        code: "NETWORK_ERROR",
+        message: "Erro de conexão com a API do Bling",
+        status: 503,
+        details: { context, network_error: true },
+      },
+    }
+  }
 
-    case 403:
-      return new BlingApiError("forbidden", "Acesso negado - verifique as permissões do token")
+  // Bling API specific errors
+  if (error instanceof BlingApiError) {
+    return {
+      success: false,
+      error: {
+        code: error.code,
+        message: error.message,
+        status: error.status,
+        details: error.details,
+      },
+    }
+  }
 
-    case 404:
-      return new BlingApiError("resource_not_found", "Recurso não encontrado")
+  // HTTP errors with response
+  if (error.response) {
+    const status = error.response.status
+    let code = "HTTP_ERROR"
+    let message = `Erro HTTP ${status}`
 
-    case 422:
-      return new BlingApiError("unprocessable_entity", "Entidade não processável", undefined, data.error?.details)
+    switch (status) {
+      case 400:
+        code = "BAD_REQUEST"
+        message = "Requisição inválida"
+        break
+      case 401:
+        code = "UNAUTHORIZED"
+        message = "Token de acesso inválido ou expirado"
+        break
+      case 403:
+        code = "FORBIDDEN"
+        message = "Acesso negado"
+        break
+      case 404:
+        code = "NOT_FOUND"
+        message = "Recurso não encontrado"
+        break
+      case 422:
+        code = "VALIDATION_ERROR"
+        message = "Dados de entrada inválidos"
+        break
+      case 429:
+        code = "RATE_LIMIT"
+        message = "Limite de requisições excedido"
+        break
+      case 500:
+        code = "SERVER_ERROR"
+        message = "Erro interno do servidor Bling"
+        break
+    }
 
-    case 429:
-      const retryAfter = response.headers.get("retry-after")
-      return new BlingApiError(
-        "too_many_requests",
-        `Limite de requisições excedido. Tente novamente em ${retryAfter || "60"} segundos`,
-        undefined,
-        { retryAfter },
-      )
+    return {
+      success: false,
+      error: {
+        code,
+        message,
+        status,
+        details: {
+          context,
+          response_data: error.response.data,
+          headers: error.response.headers,
+        },
+      },
+    }
+  }
 
-    case 500:
-      return new BlingApiError("server_error", "Erro interno do servidor Bling")
-
-    case 502:
-    case 503:
-    case 504:
-      return new BlingApiError("service_unavailable", "Serviço temporariamente indisponível")
-
-    default:
-      return new BlingApiError("unknown_error", `Erro desconhecido (${status})`, undefined, data)
+  // Generic errors
+  return {
+    success: false,
+    error: {
+      code: "INTERNAL_ERROR",
+      message: error.message || "Erro interno não identificado",
+      status: 500,
+      details: {
+        context,
+        error_type: error.constructor.name,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      },
+    },
   }
 }
 
-export function getErrorMessage(error: BlingApiError): string {
-  const messages: Record<string, string> = {
-    validation_error: "Os dados fornecidos são inválidos. Verifique os campos e tente novamente.",
-    missing_required_field_error: "Um campo obrigatório não foi preenchido.",
-    unauthorized: "Sua sessão expirou. Faça login novamente.",
-    forbidden: "Você não tem permissão para realizar esta ação.",
-    resource_not_found: "O recurso solicitado não foi encontrado.",
-    too_many_requests: "Muitas requisições foram feitas. Aguarde um momento e tente novamente.",
-    server_error: "Erro interno do servidor. Tente novamente mais tarde.",
-    service_unavailable: "Serviço temporariamente indisponível. Tente novamente em alguns minutos.",
-    unknown_error: "Ocorreu um erro inesperado. Tente novamente.",
+export function createBlingApiResponse<T>(data: T, elapsedTime: number, requestId?: string): BlingApiResponse<T> {
+  return {
+    success: true,
+    data,
+    meta: {
+      elapsed_time: elapsedTime,
+      timestamp: new Date().toISOString(),
+      request_id: requestId,
+    },
+  }
+}
+
+export function validateBlingResponse(response: any, expectedFields: string[] = []): boolean {
+  if (!response) {
+    throw new BlingApiError("Resposta vazia da API Bling", "EMPTY_RESPONSE", 502)
   }
 
-  return messages[error.type] || error.message
+  // Verificar se é um erro do Bling
+  if (response.error) {
+    throw new BlingApiError(
+      response.error.message || "Erro retornado pela API Bling",
+      response.error.code || "BLING_API_ERROR",
+      response.error.status || 400,
+      response.error,
+    )
+  }
+
+  // Verificar campos obrigatórios
+  for (const field of expectedFields) {
+    if (!(field in response)) {
+      throw new BlingApiError(`Campo obrigatório '${field}' não encontrado na resposta`, "MISSING_FIELD", 502, {
+        missing_field: field,
+        response,
+      })
+    }
+  }
+
+  return true
+}
+
+export function logBlingApiCall(method: string, url: string, status: number, elapsedTime: number, requestId?: string) {
+  const logLevel = status >= 400 ? "error" : status >= 300 ? "warn" : "info"
+  const emoji = status >= 400 ? "❌" : status >= 300 ? "⚠️" : "✅"
+
+  console.log(`${emoji} Bling API ${method} ${url} - ${status} (${elapsedTime}ms)${requestId ? ` [${requestId}]` : ""}`)
 }

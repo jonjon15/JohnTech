@@ -1,24 +1,31 @@
 import { NextResponse } from "next/server"
-import { getValidAccessToken, clearTokens } from "@/lib/bling-auth"
+import { getValidAccessToken } from "@/lib/bling-auth"
+import { handleBlingApiError, createBlingApiResponse, logBlingApiCall } from "@/lib/bling-error-handler"
 
 const userEmail = "admin@johntech.com"
+const REQUEST_TIMEOUT = 8000
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
-  try {
-    console.log("=== GET produto individual ===", params.id)
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
 
-    let token = await getValidAccessToken(userEmail)
+  try {
+    console.log(`🔍 [${requestId}] GET /api/bling/homologacao/produtos/${params.id} - INÍCIO`)
+
+    const token = await getValidAccessToken(userEmail)
     if (!token) {
-      return NextResponse.json(
-        { error: "Token não encontrado", message: "Faça a autenticação OAuth primeiro" },
-        { status: 401 },
-      )
+      return NextResponse.json(handleBlingApiError(new Error("Token não encontrado"), "GET_HOMOLOG_PRODUCT"), {
+        status: 401,
+      })
     }
 
     const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
     const url = `${blingApiUrl}/homologacao/produtos/${params.id}`
 
-    let response = await fetch(url, {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
+
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -26,63 +33,60 @@ export async function GET(request: Request, { params }: { params: { id: string }
         "Content-Type": "application/json",
         "User-Agent": "BlingPro/1.0",
       },
+      signal: controller.signal,
     })
 
-    if (response.status === 401) {
-      token = await getValidAccessToken(userEmail, true)
-      if (!token) {
-        await clearTokens(userEmail)
-        return NextResponse.json({ error: "Falha ao renovar token" }, { status: 401 })
-      }
+    clearTimeout(timeoutId)
 
-      response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "User-Agent": "BlingPro/1.0",
-        },
-      })
-    }
-
-    const responseText = await response.text()
+    const elapsedTime = Date.now() - startTime
+    logBlingApiCall("GET", `/homologacao/produtos/${params.id}`, response.status, elapsedTime, requestId)
 
     if (!response.ok) {
-      console.error("Erro ao buscar produto:", response.status, responseText)
-      let errorData
-      try {
-        errorData = JSON.parse(responseText)
-      } catch {
-        errorData = { error: responseText }
-      }
-      return NextResponse.json({ error: "Erro ao buscar produto", details: errorData }, { status: response.status })
+      const errorText = await response.text()
+      console.error(`❌ [${requestId}] Erro ao buscar produto:`, errorText)
+
+      return NextResponse.json(
+        handleBlingApiError({ response: { status: response.status, data: errorText } }, "GET_HOMOLOG_PRODUCT"),
+        { status: response.status },
+      )
     }
 
-    const data = JSON.parse(responseText)
-    return NextResponse.json(data)
+    const data = await response.json()
+    console.log(`✅ [${requestId}] Produto obtido: ${data.data?.nome}`)
+
+    return NextResponse.json(createBlingApiResponse(data, elapsedTime, requestId))
   } catch (error: any) {
-    console.error("Erro em GET produto individual:", error)
-    return NextResponse.json({ error: "Erro interno", message: error.message }, { status: 500 })
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em GET produto homologação:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "GET_HOMOLOG_PRODUCT"), { status: 500 })
   }
 }
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
-  try {
-    console.log("=== PUT produto ===", params.id)
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
 
-    let token = await getValidAccessToken(userEmail)
+  try {
+    console.log(`✏️ [${requestId}] PUT /api/bling/homologacao/produtos/${params.id} - INÍCIO`)
+
+    const token = await getValidAccessToken(userEmail)
     if (!token) {
-      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 })
+      return NextResponse.json(handleBlingApiError(new Error("Token não encontrado"), "UPDATE_HOMOLOG_PRODUCT"), {
+        status: 401,
+      })
     }
 
-    const body = await request.json()
-    console.log("Dados para atualizar:", body)
+    const productData = await request.json()
+    console.log(`📝 [${requestId}] Dados para atualização:`, JSON.stringify(productData, null, 2))
 
     const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
     const url = `${blingApiUrl}/homologacao/produtos/${params.id}`
 
-    let response = await fetch(url, {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
+
+    const response = await fetch(url, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -90,111 +94,99 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         "Content-Type": "application/json",
         "User-Agent": "BlingPro/1.0",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(productData),
+      signal: controller.signal,
     })
 
-    if (response.status === 401) {
-      token = await getValidAccessToken(userEmail, true)
-      if (!token) {
-        await clearTokens(userEmail)
-        return NextResponse.json({ error: "Falha ao renovar token" }, { status: 401 })
-      }
+    clearTimeout(timeoutId)
 
-      response = await fetch(url, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "User-Agent": "BlingPro/1.0",
-        },
-        body: JSON.stringify(body),
-      })
-    }
-
-    const responseText = await response.text()
+    const elapsedTime = Date.now() - startTime
+    logBlingApiCall("PUT", `/homologacao/produtos/${params.id}`, response.status, elapsedTime, requestId)
 
     if (!response.ok) {
-      console.error("Erro ao atualizar produto:", response.status, responseText)
-      let errorData
-      try {
-        errorData = JSON.parse(responseText)
-      } catch {
-        errorData = { error: responseText }
-      }
-      return NextResponse.json({ error: "Erro ao atualizar produto", details: errorData }, { status: response.status })
+      const errorText = await response.text()
+      console.error(`❌ [${requestId}] Erro ao atualizar produto:`, errorText)
+
+      return NextResponse.json(
+        handleBlingApiError({ response: { status: response.status, data: errorText } }, "UPDATE_HOMOLOG_PRODUCT"),
+        { status: response.status },
+      )
     }
 
-    let data
-    try {
-      data = JSON.parse(responseText)
-    } catch {
-      data = { message: "Produto atualizado com sucesso" }
-    }
+    const data = await response.json()
+    console.log(`✅ [${requestId}] Produto atualizado: ${params.id}`)
 
-    console.log("Produto atualizado com sucesso")
-    return NextResponse.json(data)
+    return NextResponse.json(createBlingApiResponse(data, elapsedTime, requestId))
   } catch (error: any) {
-    console.error("Erro em PUT produto:", error)
-    return NextResponse.json({ error: "Erro interno", message: error.message }, { status: 500 })
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em PUT produto homologação:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "UPDATE_HOMOLOG_PRODUCT"), { status: 500 })
   }
 }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
-  try {
-    console.log("=== DELETE produto ===", params.id)
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
 
-    let token = await getValidAccessToken(userEmail)
+  try {
+    console.log(`🗑️ [${requestId}] DELETE /api/bling/homologacao/produtos/${params.id} - INÍCIO`)
+
+    const token = await getValidAccessToken(userEmail)
     if (!token) {
-      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 })
+      return NextResponse.json(handleBlingApiError(new Error("Token não encontrado"), "DELETE_HOMOLOG_PRODUCT"), {
+        status: 401,
+      })
     }
 
     const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
     const url = `${blingApiUrl}/homologacao/produtos/${params.id}`
 
-    let response = await fetch(url, {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
+
+    const response = await fetch(url, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
         "User-Agent": "BlingPro/1.0",
       },
+      signal: controller.signal,
     })
 
-    if (response.status === 401) {
-      token = await getValidAccessToken(userEmail, true)
-      if (!token) {
-        await clearTokens(userEmail)
-        return NextResponse.json({ error: "Falha ao renovar token" }, { status: 401 })
-      }
+    clearTimeout(timeoutId)
 
-      response = await fetch(url, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-          "User-Agent": "BlingPro/1.0",
-        },
-      })
-    }
-
-    const responseText = await response.text()
+    const elapsedTime = Date.now() - startTime
+    logBlingApiCall("DELETE", `/homologacao/produtos/${params.id}`, response.status, elapsedTime, requestId)
 
     if (!response.ok) {
-      console.error("Erro ao deletar produto:", response.status, responseText)
-      let errorData
-      try {
-        errorData = JSON.parse(responseText)
-      } catch {
-        errorData = { error: responseText }
-      }
-      return NextResponse.json({ error: "Erro ao deletar produto", details: errorData }, { status: response.status })
+      const errorText = await response.text()
+      console.error(`❌ [${requestId}] Erro ao excluir produto:`, errorText)
+
+      return NextResponse.json(
+        handleBlingApiError({ response: { status: response.status, data: errorText } }, "DELETE_HOMOLOG_PRODUCT"),
+        { status: response.status },
+      )
     }
 
-    console.log("Produto deletado com sucesso")
-    return NextResponse.json({ message: "Produto deletado com sucesso" })
+    console.log(`✅ [${requestId}] Produto excluído: ${params.id}`)
+
+    return NextResponse.json(
+      createBlingApiResponse(
+        {
+          message: "Produto excluído com sucesso",
+          product_id: params.id,
+          deleted_at: new Date().toISOString(),
+        },
+        elapsedTime,
+        requestId,
+      ),
+    )
   } catch (error: any) {
-    console.error("Erro em DELETE produto:", error)
-    return NextResponse.json({ error: "Erro interno", message: error.message }, { status: 500 })
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em DELETE produto homologação:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "DELETE_HOMOLOG_PRODUCT"), { status: 500 })
   }
 }

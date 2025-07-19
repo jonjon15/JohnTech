@@ -6,9 +6,13 @@ interface BlingToken {
   expires_at: string
 }
 
+const REFRESH_TIMEOUT = 5000 // 5 segundos para refresh
+
 export async function getValidAccessToken(userEmail: string, forceRefresh = false): Promise<string | null> {
   try {
-    // Buscar token no banco
+    console.log("🔑 Buscando token para:", userEmail)
+
+    // Buscar token no banco com timeout rápido
     const result = await sql<BlingToken>`
       SELECT access_token, refresh_token, expires_at 
       FROM bling_tokens 
@@ -18,7 +22,7 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
     `
 
     if (result.rows.length === 0) {
-      console.log("Nenhum token encontrado para o usuário:", userEmail)
+      console.log("❌ Nenhum token encontrado")
       return null
     }
 
@@ -26,25 +30,26 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
     const now = new Date()
     const expiresAt = new Date(tokenData.expires_at)
     const isExpired = now >= expiresAt
+    const minutesUntilExpiry = Math.round((expiresAt.getTime() - now.getTime()) / 1000 / 60)
 
-    console.log("Token status:", {
+    console.log("📊 Status do token:", {
       expires_at: expiresAt.toISOString(),
-      current_time: now.toISOString(),
       is_expired: isExpired,
+      minutes_until_expiry: minutesUntilExpiry,
       force_refresh: forceRefresh,
     })
 
-    // Se não está expirado e não é refresh forçado, retorna o token atual
+    // Se não está expirado e não é refresh forçado
     if (!isExpired && !forceRefresh) {
-      console.log("Usando token existente válido")
+      console.log("✅ Usando token existente válido")
       return tokenData.access_token
     }
 
-    // Token expirado ou refresh forçado - tentar renovar
-    console.log("Tentando renovar token...")
+    // Token expirado ou refresh forçado
+    console.log("🔄 Renovando token...")
     return await refreshAccessToken(userEmail, tokenData.refresh_token)
   } catch (error) {
-    console.error("Erro ao obter token válido:", error)
+    console.error("❌ Erro ao obter token:", error)
     return null
   }
 }
@@ -52,16 +57,19 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
 async function refreshAccessToken(userEmail: string, refreshToken: string): Promise<string | null> {
   try {
     if (!refreshToken) {
-      console.error("Refresh token não disponível")
+      console.error("❌ Refresh token não disponível")
       return null
     }
 
-    console.log("Fazendo chamada de refresh token...")
+    console.log("🔄 Fazendo refresh do token...")
 
-    // Usar Basic Auth conforme documentação do Bling
     const credentials = Buffer.from(`${process.env.BLING_CLIENT_ID}:${process.env.BLING_CLIENT_SECRET}`).toString(
       "base64",
     )
+
+    // Timeout para refresh
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REFRESH_TIMEOUT)
 
     const refreshResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
@@ -75,21 +83,23 @@ async function refreshAccessToken(userEmail: string, refreshToken: string): Prom
         grant_type: "refresh_token",
         refresh_token: refreshToken,
       }),
+      signal: controller.signal,
     })
 
+    clearTimeout(timeoutId)
+
     const responseText = await refreshResponse.text()
-    console.log("Resposta do refresh:", {
+    console.log("📡 Resposta do refresh:", {
       status: refreshResponse.status,
-      headers: Object.fromEntries(refreshResponse.headers.entries()),
-      body: responseText,
+      body_length: responseText.length,
     })
 
     if (!refreshResponse.ok) {
-      console.error("Falha ao renovar token:", refreshResponse.status, responseText)
+      console.error("❌ Falha no refresh:", refreshResponse.status)
 
-      // Se o refresh token é inválido, limpar tokens do banco
+      // Se refresh token inválido, limpar do banco
       if (refreshResponse.status === 400) {
-        console.log("Refresh token inválido, removendo tokens do banco")
+        console.log("🗑️ Removendo tokens inválidos")
         await sql`DELETE FROM bling_tokens WHERE user_email = ${userEmail}`
       }
 
@@ -99,12 +109,12 @@ async function refreshAccessToken(userEmail: string, refreshToken: string): Prom
     const newTokenData = JSON.parse(responseText)
     const newExpiresAt = new Date(Date.now() + newTokenData.expires_in * 1000)
 
-    console.log("Token renovado com sucesso:", {
+    console.log("✅ Token renovado:", {
       expires_in: newTokenData.expires_in,
       new_expires_at: newExpiresAt.toISOString(),
     })
 
-    // Salvar novo token no banco
+    // Salvar novo token
     await sql`
       UPDATE bling_tokens 
       SET 
@@ -116,8 +126,13 @@ async function refreshAccessToken(userEmail: string, refreshToken: string): Prom
     `
 
     return newTokenData.access_token
-  } catch (error) {
-    console.error("Erro ao renovar token:", error)
+  } catch (error: any) {
+    console.error("❌ Erro no refresh:", error.message)
+
+    if (error.name === "AbortError") {
+      console.error("⏰ Timeout no refresh do token")
+    }
+
     return null
   }
 }
@@ -131,7 +146,7 @@ export async function saveTokens(
   try {
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
-    console.log("Salvando tokens:", {
+    console.log("💾 Salvando tokens:", {
       user_email: userEmail,
       expires_in: expiresIn,
       expires_at: expiresAt.toISOString(),
@@ -148,10 +163,10 @@ export async function saveTokens(
         updated_at = NOW()
     `
 
-    console.log("Tokens salvos com sucesso")
+    console.log("✅ Tokens salvos com sucesso")
     return true
   } catch (error) {
-    console.error("Erro ao salvar tokens:", error)
+    console.error("❌ Erro ao salvar tokens:", error)
     return false
   }
 }
@@ -159,8 +174,8 @@ export async function saveTokens(
 export async function clearTokens(userEmail: string): Promise<void> {
   try {
     await sql`DELETE FROM bling_tokens WHERE user_email = ${userEmail}`
-    console.log("Tokens removidos para:", userEmail)
+    console.log("🗑️ Tokens removidos para:", userEmail)
   } catch (error) {
-    console.error("Erro ao remover tokens:", error)
+    console.error("❌ Erro ao remover tokens:", error)
   }
 }

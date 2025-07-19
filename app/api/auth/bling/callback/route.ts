@@ -1,219 +1,165 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/db"
+import { NextResponse } from "next/server"
+import { saveTokens } from "@/lib/bling-auth"
+import { handleBlingApiError, createBlingApiResponse } from "@/lib/bling-error-handler"
 
-const BLING_CLIENT_ID = process.env.BLING_CLIENT_ID!
-const BLING_CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
-const BLING_TOKEN_URL = "https://www.bling.com.br/Api/v3/oauth/token"
+const userEmail = "admin@johntech.com"
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
-  const code = searchParams.get("code")
-  const state = searchParams.get("state")
-  const error = searchParams.get("error")
-
-  // Redireciona para a página de callback com os parâmetros
-  const callbackUrl = new URL("/auth/callback", request.url)
-
-  if (error) {
-    callbackUrl.searchParams.set("error", error)
-  }
-
-  if (code) {
-    callbackUrl.searchParams.set("code", code)
-  }
-
-  if (state) {
-    callbackUrl.searchParams.set("state", state)
-  }
-
-  // Verifica se houve erro na autorização
-  if (error) {
-    console.error("Erro na autorização:", error)
-    return NextResponse.redirect(callbackUrl)
-  }
-
-  // Verifica se o código foi recebido
-  if (!code) {
-    console.error("Código de autorização não recebido")
-    return NextResponse.redirect(callbackUrl)
-  }
-
-  // Verifica o state (opcional, mas recomendado para segurança)
-  if (state) {
-    // Aqui você pode validar se o state corresponde ao que foi enviado
-    console.log("State recebido:", state)
-  }
+export async function POST(request: Request) {
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
 
   try {
-    // Troca o código pelo token de acesso
-    const tokenResponse = await exchangeCodeForToken(code, request.url)
+    console.log(`🔐 [${requestId}] POST /api/auth/bling/callback - INÍCIO`)
 
-    if (!tokenResponse.success) {
-      callbackUrl.searchParams.set("error", "token_failed")
-      callbackUrl.searchParams.set("message", encodeURIComponent(tokenResponse.error))
-      return NextResponse.redirect(callbackUrl)
+    const { code, state } = await request.json()
+
+    if (!code) {
+      return NextResponse.json(
+        handleBlingApiError(new Error("Código de autorização não fornecido"), "OAUTH_CALLBACK"),
+        { status: 400 },
+      )
     }
 
-    // Salva os tokens no banco de dados
-    await saveTokensToDatabase(tokenResponse.data)
+    console.log(`📝 [${requestId}] Código recebido: ${code.substring(0, 10)}...`)
+    console.log(`📝 [${requestId}] State: ${state}`)
 
-    // Redireciona para o dashboard com sucesso
-    callbackUrl.searchParams.set("success", "true")
-    return NextResponse.redirect(callbackUrl)
-  } catch (error) {
-    console.error("Erro no callback:", error)
-    callbackUrl.searchParams.set("error", "callback_failed")
-    callbackUrl.searchParams.set(
-      "message",
-      encodeURIComponent(error instanceof Error ? error.message : "Erro desconhecido"),
-    )
-    return NextResponse.redirect(callbackUrl)
-  }
-}
+    // Preparar credenciais para Basic Auth
+    const clientId = process.env.BLING_CLIENT_ID
+    const clientSecret = process.env.BLING_CLIENT_SECRET
 
-async function exchangeCodeForToken(code: string, requestUrl: string) {
-  try {
-    const baseUrl = new URL(requestUrl).origin
-    const redirectUri = `${baseUrl}/auth/callback`
+    if (!clientId || !clientSecret) {
+      return NextResponse.json(
+        handleBlingApiError(new Error("Credenciais do Bling não configuradas"), "OAUTH_CALLBACK"),
+        { status: 500 },
+      )
+    }
 
-    const formData = new URLSearchParams({
-      grant_type: "authorization_code",
-      code: code,
-      redirect_uri: redirectUri,
-    })
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
+    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`
 
-    const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
+    console.log(`🔗 [${requestId}] Redirect URI: ${redirectUri}`)
 
-    const response = await fetch(BLING_TOKEN_URL, {
+    // Trocar código por tokens
+    const tokenResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
         Authorization: `Basic ${credentials}`,
+        "User-Agent": "BlingPro/1.0",
       },
-      body: formData,
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code,
+        redirect_uri: redirectUri,
+      }),
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Erro ao trocar código por token:", response.status, errorText)
-      return {
-        success: false,
-        error: `Falha na troca do token: ${response.status}`,
+    const responseText = await tokenResponse.text()
+    console.log(`📡 [${requestId}] Resposta do token:`, {
+      status: tokenResponse.status,
+      headers: Object.fromEntries(tokenResponse.headers.entries()),
+      body: responseText.substring(0, 200) + "...",
+    })
+
+    if (!tokenResponse.ok) {
+      console.error(`❌ [${requestId}] Erro ao obter token:`, responseText)
+      return NextResponse.json(
+        handleBlingApiError({ response: { status: tokenResponse.status, data: responseText } }, "OAUTH_CALLBACK"),
+        { status: tokenResponse.status },
+      )
+    }
+
+    let tokenData
+    try {
+      tokenData = JSON.parse(responseText)
+    } catch (parseError) {
+      console.error(`❌ [${requestId}] Erro ao fazer parse da resposta:`, parseError)
+      return NextResponse.json(
+        handleBlingApiError(new Error("Resposta inválida do servidor Bling"), "OAUTH_CALLBACK"),
+        { status: 502 },
+      )
+    }
+
+    // Validar dados do token
+    if (!tokenData.access_token || !tokenData.refresh_token) {
+      console.error(`❌ [${requestId}] Tokens não encontrados na resposta:`, tokenData)
+      return NextResponse.json(handleBlingApiError(new Error("Tokens não encontrados na resposta"), "OAUTH_CALLBACK"), {
+        status: 502,
+      })
+    }
+
+    console.log(`✅ [${requestId}] Tokens obtidos:`, {
+      access_token: tokenData.access_token.substring(0, 20) + "...",
+      refresh_token: tokenData.refresh_token.substring(0, 20) + "...",
+      expires_in: tokenData.expires_in,
+      token_type: tokenData.token_type,
+    })
+
+    // Salvar tokens no banco
+    const saved = await saveTokens(userEmail, tokenData.access_token, tokenData.refresh_token, tokenData.expires_in)
+
+    if (!saved) {
+      return NextResponse.json(handleBlingApiError(new Error("Erro ao salvar tokens no banco"), "OAUTH_CALLBACK"), {
+        status: 500,
+      })
+    }
+
+    // Testar token fazendo uma chamada para /me
+    try {
+      console.log(`🧪 [${requestId}] Testando token...`)
+
+      const meResponse = await fetch("https://www.bling.com.br/Api/v3/me", {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+          Accept: "application/json",
+          "User-Agent": "BlingPro/1.0",
+        },
+      })
+
+      if (meResponse.ok) {
+        const meData = await meResponse.json()
+        console.log(`✅ [${requestId}] Token válido! Usuário:`, meData.data?.nome || "N/A")
+      } else {
+        console.warn(`⚠️ [${requestId}] Token salvo mas teste falhou:`, meResponse.status)
       }
+    } catch (testError) {
+      console.warn(`⚠️ [${requestId}] Erro no teste do token:`, testError)
+      // Não falhar por erro no teste
     }
 
-    const tokenData = await response.json()
+    const elapsedTime = Date.now() - startTime
+    console.log(`✅ [${requestId}] Callback concluído em ${elapsedTime}ms`)
 
-    return {
-      success: true,
-      data: {
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        expires_in: tokenData.expires_in,
-        token_type: tokenData.token_type,
-        scope: tokenData.scope,
-      },
-    }
-  } catch (error) {
-    console.error("Erro na requisição de token:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Erro desconhecido",
-    }
+    return NextResponse.json(
+      createBlingApiResponse(
+        {
+          message: "Autenticação realizada com sucesso",
+          user_email: userEmail,
+          token_type: tokenData.token_type,
+          expires_in: tokenData.expires_in,
+          scope: tokenData.scope,
+          authenticated_at: new Date().toISOString(),
+        },
+        elapsedTime,
+        requestId,
+      ),
+    )
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro no callback:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "OAUTH_CALLBACK"), { status: 500 })
   }
 }
 
-async function saveTokensToDatabase(tokenData: any) {
-  try {
-    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
-
-    // Primeiro, tenta buscar informações do usuário usando o token
-    const userInfo = await getUserInfo(tokenData.access_token)
-
-    if (userInfo.success) {
-      // Salva ou atualiza o usuário no banco
-      await sql`
-        INSERT INTO users (
-          email, 
-          name, 
-          bling_access_token, 
-          bling_refresh_token, 
-          bling_token_expires_at,
-          bling_user_id,
-          created_at,
-          updated_at
-        ) VALUES (
-          ${userInfo.data.email || "user@bling.com"}, 
-          ${userInfo.data.name || "Usuário Bling"}, 
-          ${tokenData.access_token}, 
-          ${tokenData.refresh_token}, 
-          ${expiresAt.toISOString()},
-          ${userInfo.data.id || null},
-          NOW(),
-          NOW()
-        )
-        ON CONFLICT (email) 
-        DO UPDATE SET 
-          bling_access_token = EXCLUDED.bling_access_token,
-          bling_refresh_token = EXCLUDED.bling_refresh_token,
-          bling_token_expires_at = EXCLUDED.bling_token_expires_at,
-          bling_user_id = EXCLUDED.bling_user_id,
-          updated_at = NOW()
-      `
-
-      console.log("Tokens salvos no banco com sucesso")
-    } else {
-      // Se não conseguir buscar info do usuário, salva apenas os tokens
-      await sql`
-        INSERT INTO users (
-          email, 
-          name, 
-          bling_access_token, 
-          bling_refresh_token, 
-          bling_token_expires_at,
-          created_at,
-          updated_at
-        ) VALUES (
-          'user@bling.com', 
-          'Usuário Bling', 
-          ${tokenData.access_token}, 
-          ${tokenData.refresh_token}, 
-          ${expiresAt.toISOString()},
-          NOW(),
-          NOW()
-        )
-        ON CONFLICT (email) 
-        DO UPDATE SET 
-          bling_access_token = EXCLUDED.bling_access_token,
-          bling_refresh_token = EXCLUDED.bling_refresh_token,
-          bling_token_expires_at = EXCLUDED.bling_token_expires_at,
-          updated_at = NOW()
-      `
-    }
-  } catch (error) {
-    console.error("Erro ao salvar tokens no banco:", error)
-    throw error
-  }
-}
-
-async function getUserInfo(accessToken: string) {
-  try {
-    const response = await fetch("https://www.bling.com.br/Api/v3/usuarios", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      return { success: false, error: "Falha ao buscar informações do usuário" }
-    }
-
-    const userData = await response.json()
-    return { success: true, data: userData.data || userData }
-  } catch (error) {
-    console.error("Erro ao buscar informações do usuário:", error)
-    return { success: false, error: "Erro na requisição" }
-  }
+export async function GET() {
+  return NextResponse.json({
+    message: "Endpoint de callback OAuth do Bling",
+    method: "POST",
+    parameters: {
+      code: "string (obrigatório)",
+      state: "string (opcional)",
+    },
+  })
 }

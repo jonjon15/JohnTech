@@ -1,131 +1,146 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { z } from "zod"
+import { NextResponse } from "next/server"
+import { getValidAccessToken } from "@/lib/bling-auth"
+import { handleBlingApiError, createBlingApiResponse, logBlingApiCall } from "@/lib/bling-error-handler"
 
-const BLING_API_BASE = "https://www.bling.com.br/Api/v3"
+const userEmail = "admin@johntech.com"
+const REQUEST_TIMEOUT = 8000
 
-// Define a schema for product data validation
-const productSchema = z.object({
-  nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
-  codigo: z.string().min(1, { message: "Código deve ter pelo menos 1 caracter." }),
-  preco: z.number().positive({ message: "Preço deve ser positivo." }),
-  estoque: z.object({
-    saldoFisico: z.number().int().nonnegative({ message: "Saldo físico não pode ser negativo." }),
-  }),
-  situacao: z.enum(["Ativo", "Inativo"]).optional().default("Ativo"),
-})
+export async function GET(request: Request) {
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
 
-// Standardized error response function
-const createErrorResponse = (message: string, status: number) => {
-  console.error(`Error: ${message} (Status: ${status})`) // Log the error
-  return NextResponse.json({ error: message }, { status })
-}
-
-export async function GET(request: NextRequest) {
   try {
+    console.log(`🔍 [${requestId}] GET /api/bling/products - INÍCIO`)
+
     const { searchParams } = new URL(request.url)
-    const page = searchParams.get("page") || "1"
-    const limit = searchParams.get("limit") || "20"
+    const limite = searchParams.get("limite") || "100"
+    const pagina = searchParams.get("pagina") || "1"
+    const criterio = searchParams.get("criterio") || "1" // 1=ID, 2=Nome, 3=Código
+    const tipo = searchParams.get("tipo") || "T" // T=Todos, P=Produto, S=Serviço
 
-    const pageNumber = Number.parseInt(page)
-    const limitNumber = Number.parseInt(limit)
-
-    if (Number.isNaN(pageNumber) || pageNumber < 1) {
-      return createErrorResponse("Página inválida.", 400)
+    // Obter token válido
+    const token = await getValidAccessToken(userEmail)
+    if (!token) {
+      return NextResponse.json(handleBlingApiError(new Error("Token não encontrado"), "GET_PRODUCTS"), { status: 401 })
     }
 
-    if (Number.isNaN(limitNumber) || limitNumber < 1 || limitNumber > 100) {
-      return createErrorResponse("Limite inválido. Deve estar entre 1 e 100.", 400)
-    }
+    // Construir URL da API Bling
+    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+    const url = new URL(`${blingApiUrl}/produtos`)
+    url.searchParams.set("limite", limite)
+    url.searchParams.set("pagina", pagina)
+    url.searchParams.set("criterio", criterio)
+    url.searchParams.set("tipo", tipo)
 
-    // In a real application, get the user's access token
-    // const accessToken = await getUserAccessToken(userId)
+    console.log(`📡 [${requestId}] Chamando: ${url.toString()}`)
 
-    // Mock response for demonstration
-    const mockProducts = {
-      data: [
-        {
-          id: 1,
-          nome: "Produto Exemplo 1",
-          codigo: "PROD001",
-          preco: 99.99,
-          estoque: {
-            saldoFisico: 50,
-          },
-          situacao: "Ativo",
-        },
-        {
-          id: 2,
-          nome: "Produto Exemplo 2",
-          codigo: "PROD002",
-          preco: 149.99,
-          estoque: {
-            saldoFisico: 25,
-          },
-          situacao: "Ativo",
-        },
-      ],
-      pagina: pageNumber,
-      totalPaginas: 5,
-      totalRegistros: 100,
-    }
+    // Fazer requisição com timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
-    // Real API call would be:
-    /*
-    const response = await fetch(`${BLING_API_BASE}/produtos?pagina=${page}&limite=${limit}`, {
+    const response = await fetch(url.toString(), {
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json',
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "BlingPro/1.0",
       },
+      signal: controller.signal,
     })
-    
+
+    clearTimeout(timeoutId)
+
+    const elapsedTime = Date.now() - startTime
+    logBlingApiCall("GET", url.pathname, response.status, elapsedTime, requestId)
+
     if (!response.ok) {
-      throw new Error('Failed to fetch products from Bling')
-    }
-    
-    const products = await response.json()
-    */
+      const errorText = await response.text()
+      console.error(`❌ [${requestId}] Erro ${response.status}:`, errorText)
 
-    console.log("Products fetched successfully.") // Log successful fetch
-    return NextResponse.json(mockProducts)
-  } catch (error) {
-    console.error("Products fetch error:", error)
-    return createErrorResponse("Falha ao buscar produtos.", 500)
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const productData = await request.json()
-
-    // Validate product data against the schema
-    try {
-      productSchema.parse(productData)
-    } catch (validationError: any) {
-      console.error("Product validation error:", validationError.errors)
-      return createErrorResponse(
-        `Erro de validação: ${validationError.errors.map((e: any) => e.message).join(", ")}`,
-        400,
+      return NextResponse.json(
+        handleBlingApiError({ response: { status: response.status, data: errorText } }, "GET_PRODUCTS"),
+        { status: response.status },
       )
     }
 
-    // In a real application:
-    // 1. Validate product data (done above)
-    // 2. Get user's access token
-    // 3. Create product in Bling
-    // 4. Return created product
+    const data = await response.json()
+    console.log(`✅ [${requestId}] Produtos obtidos: ${data.data?.length || 0}`)
 
-    // Mock creation
-    const createdProduct = {
-      id: Date.now(),
-      ...productData,
-      situacao: "Ativo",
-      dataCriacao: new Date().toISOString(),
+    return NextResponse.json(createBlingApiResponse(data, elapsedTime, requestId))
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em GET products:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "GET_PRODUCTS"), { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
+
+  try {
+    console.log(`➕ [${requestId}] POST /api/bling/products - INÍCIO`)
+
+    const token = await getValidAccessToken(userEmail)
+    if (!token) {
+      return NextResponse.json(handleBlingApiError(new Error("Token não encontrado"), "CREATE_PRODUCT"), {
+        status: 401,
+      })
     }
 
-    console.log("Product created successfully:", createdProduct) // Log successful creation
-    return NextResponse.json(createdProduct, { status: 201 })
-  } catch (error) {
-    console.error("Product creation error:", error)
-    return createErrorResponse("Falha ao criar produto.", 500)
+    const productData = await request.json()
+    console.log(`📝 [${requestId}] Dados do produto:`, JSON.stringify(productData, null, 2))
+
+    // Validar dados obrigatórios
+    if (!productData.nome) {
+      return NextResponse.json(handleBlingApiError(new Error("Nome do produto é obrigatório"), "CREATE_PRODUCT"), {
+        status: 400,
+      })
+    }
+
+    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+    const url = `${blingApiUrl}/produtos`
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "BlingPro/1.0",
+      },
+      body: JSON.stringify(productData),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    const elapsedTime = Date.now() - startTime
+    logBlingApiCall("POST", "/produtos", response.status, elapsedTime, requestId)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`❌ [${requestId}] Erro ao criar produto:`, errorText)
+
+      return NextResponse.json(
+        handleBlingApiError({ response: { status: response.status, data: errorText } }, "CREATE_PRODUCT"),
+        { status: response.status },
+      )
+    }
+
+    const data = await response.json()
+    console.log(`✅ [${requestId}] Produto criado: ID ${data.data?.id}`)
+
+    return NextResponse.json(createBlingApiResponse(data, elapsedTime, requestId), { status: 201 })
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro em POST products:`, error)
+
+    return NextResponse.json(handleBlingApiError(error, "CREATE_PRODUCT"), { status: 500 })
   }
 }
