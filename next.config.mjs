@@ -1,24 +1,34 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['@vercel/postgres'],
+    serverComponentsExternalPackages: ['@vercel/postgres']
   },
   env: {
     BLING_API_URL: process.env.BLING_API_URL,
     BLING_CLIENT_ID: process.env.BLING_CLIENT_ID,
+    BLING_CLIENT_SECRET: process.env.BLING_CLIENT_SECRET,
     NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
   },
-  images: {
-    domains: ['blob.v0.dev'],
-    remotePatterns: [
+  async headers() {
+    return [
       {
-        protocol: 'https',
-        hostname: 'blob.v0.dev',
-        port: '',
-        pathname: '/**',
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, POST, PUT, DELETE, OPTIONS',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'Content-Type, Authorization',
+          },
+        ],
       },
-    ],
-    unoptimized: true,
+    ]
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -26,17 +36,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
-        ],
-      },
-    ]
+  images: {
+    unoptimized: true,
   },
 }
 

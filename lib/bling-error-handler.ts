@@ -186,3 +186,7 @@ export function logBlingApiCall(method: string, url: string, status: number, ela
 
   console.log(`${emoji} Bling API ${method} ${url} - ${status} (${elapsedTime}ms)${requestId ? ` [${requestId}]` : ""}`)
 }
+
+// Aliases para compatibilidade
+export { handleBlingApiError as handleBlingError }
+export { logBlingApiCall as logRequest }

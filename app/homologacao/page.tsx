@@ -1,383 +1,435 @@
 "use client"
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Package, Plus, Trash2, RefreshCw, Clock, AlertTriangle } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle } from "lucide-react"
 
 interface Product {
-  id: string
+  id: number
   nome: string
-  codigo?: string
-  preco?: number
-  situacao?: string
+  descricao: string
+  preco: string
+  estoque: number
+  bling_id?: string
+  created_at: string
+  updated_at: string
+}
+
+interface ApiResponse {
+  success: boolean
+  data?: {
+    produtos?: Product[]
+    produto?: Product
+    total?: number
+  }
+  error?: {
+    code: string
+    message: string
+  }
 }
 
 export default function HomologacaoPage() {
-  const [loading, setLoading] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({
     nome: "",
-    codigo: "",
-    preco: "",
     descricao: "",
+    preco: "",
+    estoque: "",
   })
-  const [activeTab, setActiveTab] = useState("list")
-  const [stats, setStats] = useState({
-    total: 0,
-    elapsed_time: 0,
-    last_update: "",
-  })
-  const { toast } = useToast()
 
+  // Carregar produtos
   const loadProducts = async () => {
-    setLoading(true)
     try {
-      console.log("🔄 Carregando produtos...")
-      const startTime = Date.now()
+      setLoading(true)
+      setError(null)
 
-      const response = await fetch("/api/bling/homologacao/produtos", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      })
+      const response = await fetch("/api/bling/homologacao/produtos")
+      const data: ApiResponse = await response.json()
 
-      const data = await response.json()
-      const elapsed = Date.now() - startTime
-
-      console.log("📊 Resposta:", { status: response.status, elapsed, data })
-
-      if (response.ok) {
-        const productList = data.data || []
-        setProducts(productList)
-        setStats({
-          total: productList.length,
-          elapsed_time: elapsed,
-          last_update: new Date().toLocaleTimeString(),
-        })
-
-        toast({
-          title: "✅ Produtos carregados",
-          description: `${productList.length} produtos em ${elapsed}ms`,
-        })
+      if (data.success && data.data?.produtos) {
+        setProducts(data.data.produtos)
       } else {
-        throw new Error(data.error || `Erro ${response.status}`)
+        setError(data.error?.message || "Erro ao carregar produtos")
       }
-    } catch (error: any) {
-      console.error("❌ Erro ao carregar produtos:", error)
-      toast({
-        title: "❌ Erro ao carregar",
-        description: error.message,
-        variant: "destructive",
-      })
+    } catch (err) {
+      setError("Erro de conexão ao carregar produtos")
+      console.error("Erro ao carregar produtos:", err)
     } finally {
       setLoading(false)
     }
   }
 
+  // Criar produto
   const createProduct = async () => {
-    if (!formData.nome || !formData.codigo) {
-      toast({
-        title: "⚠️ Campos obrigatórios",
-        description: "Nome e código são obrigatórios",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
     try {
-      console.log("➕ Criando produto:", formData)
+      setError(null)
+      setSuccess(null)
 
-      const productData = {
-        nome: formData.nome,
-        codigo: formData.codigo,
-        preco: formData.preco ? Number.parseFloat(formData.preco) : 0,
-        descricao: formData.descricao || "",
-        situacao: "Ativo",
-        formato: "S", // Simples
-        tipo: "P", // Produto
+      const payload = {
+        nome: formData.nome.trim(),
+        descricao: formData.descricao.trim(),
+        preco: Number.parseFloat(formData.preco) || 0,
+        estoque: Number.parseInt(formData.estoque) || 0,
       }
 
       const response = await fetch("/api/bling/homologacao/produtos", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(productData),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       })
 
-      const data = await response.json()
+      const data: ApiResponse = await response.json()
 
-      if (response.ok) {
-        toast({
-          title: "✅ Produto criado",
-          description: `${formData.nome} criado com sucesso`,
-        })
-
-        // Limpar formulário
-        setFormData({ nome: "", codigo: "", preco: "", descricao: "" })
-
-        // Recarregar lista
-        await loadProducts()
-        setActiveTab("list")
+      if (data.success && data.data?.produto) {
+        setProducts((prev) => [data.data!.produto!, ...prev])
+        setFormData({ nome: "", descricao: "", preco: "", estoque: "" })
+        setShowForm(false)
+        setSuccess("Produto criado com sucesso!")
       } else {
-        throw new Error(data.error || `Erro ${response.status}`)
+        setError(data.error?.message || "Erro ao criar produto")
       }
-    } catch (error: any) {
-      console.error("❌ Erro ao criar produto:", error)
-      toast({
-        title: "❌ Erro ao criar",
-        description: error.message,
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      setError("Erro de conexão ao criar produto")
+      console.error("Erro ao criar produto:", err)
     }
   }
 
-  const deleteProduct = async (productId: string) => {
-    if (!confirm("Tem certeza que deseja excluir este produto?")) return
-
-    setLoading(true)
+  // Atualizar produto
+  const updateProduct = async (id: number, updatedData: Partial<Product>) => {
     try {
-      const response = await fetch(`/api/bling/homologacao/produtos/${productId}`, {
+      setError(null)
+      setSuccess(null)
+
+      const payload = {
+        nome: updatedData.nome?.trim(),
+        descricao: updatedData.descricao?.trim(),
+        preco: updatedData.preco ? Number.parseFloat(updatedData.preco) : undefined,
+        estoque: updatedData.estoque,
+      }
+
+      const response = await fetch(`/api/bling/homologacao/produtos/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const data: ApiResponse = await response.json()
+
+      if (data.success && data.data?.produto) {
+        setProducts((prev) => prev.map((p) => (p.id === id ? data.data!.produto! : p)))
+        setEditingId(null)
+        setSuccess("Produto atualizado com sucesso!")
+      } else {
+        setError(data.error?.message || "Erro ao atualizar produto")
+      }
+    } catch (err) {
+      setError("Erro de conexão ao atualizar produto")
+      console.error("Erro ao atualizar produto:", err)
+    }
+  }
+
+  // Deletar produto
+  const deleteProduct = async (id: number) => {
+    if (!confirm("Tem certeza que deseja deletar este produto?")) {
+      return
+    }
+
+    try {
+      setError(null)
+      setSuccess(null)
+
+      const response = await fetch(`/api/bling/homologacao/produtos/${id}`, {
         method: "DELETE",
       })
 
-      const data = await response.json()
+      const data: ApiResponse = await response.json()
 
-      if (response.ok) {
-        toast({
-          title: "✅ Produto excluído",
-          description: "Produto removido com sucesso",
-        })
-
-        await loadProducts()
+      if (data.success) {
+        setProducts((prev) => prev.filter((p) => p.id !== id))
+        setSuccess("Produto deletado com sucesso!")
       } else {
-        throw new Error(data.error || `Erro ${response.status}`)
+        setError(data.error?.message || "Erro ao deletar produto")
       }
-    } catch (error: any) {
-      console.error("❌ Erro ao excluir:", error)
-      toast({
-        title: "❌ Erro ao excluir",
-        description: error.message,
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      setError("Erro de conexão ao deletar produto")
+      console.error("Erro ao deletar produto:", err)
     }
   }
 
+  useEffect(() => {
+    loadProducts()
+  }, [])
+
+  // Auto-hide messages
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [success])
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 8000)
+      return () => clearTimeout(timer)
+    }
+  }, [error])
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Package className="h-6 w-6" />
-              Homologação Bling - CRUD Produtos
-            </CardTitle>
-            <CardDescription className="text-white/70">
-              Teste completo das operações Create, Read, Update, Delete
-            </CardDescription>
-          </CardHeader>
-        </Card>
+    <div className="container mx-auto p-6 max-w-6xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Homologação - Produtos</h1>
+        <p className="text-muted-foreground">
+          Ambiente de testes para gerenciar produtos localmente antes da integração com o Bling.
+        </p>
+      </div>
 
-        {/* Stats */}
-        {stats.last_update && (
-          <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-white">{stats.total}</div>
-                  <div className="text-white/70 text-sm">Produtos</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-white">{stats.elapsed_time}ms</div>
-                  <div className="text-white/70 text-sm">Tempo de resposta</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-white">{stats.last_update}</div>
-                  <div className="text-white/70 text-sm">Última atualização</div>
-                </div>
+      {/* Mensagens de Status */}
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert className="mb-6 border-green-200 bg-green-50 text-green-800">
+          <CheckCircle className="h-4 w-4" />
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Botão Adicionar Produto */}
+      <div className="mb-6">
+        <Button onClick={() => setShowForm(!showForm)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          {showForm ? "Cancelar" : "Adicionar Produto"}
+        </Button>
+      </div>
+
+      {/* Formulário de Criação */}
+      {showForm && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Novo Produto</CardTitle>
+            <CardDescription>Preencha os dados do produto para criar um novo item.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="nome">Nome *</Label>
+                <Input
+                  id="nome"
+                  value={formData.nome}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
+                  placeholder="Nome do produto"
+                />
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 bg-white/10">
-            <TabsTrigger value="list" className="text-white">
-              📋 Listar Produtos
-            </TabsTrigger>
-            <TabsTrigger value="create" className="text-white">
-              ➕ Criar Produto
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Lista de Produtos */}
-          <TabsContent value="list" className="space-y-4">
-            <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle className="text-white">Produtos Cadastrados</CardTitle>
-                  <Button onClick={loadProducts} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    {loading ? "Carregando..." : "Atualizar"}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {products.length === 0 ? (
-                  <Alert>
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                      Nenhum produto encontrado. Clique em "Atualizar" para carregar ou crie um novo produto.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <div className="space-y-3">
-                    {products.map((product) => (
-                      <div
-                        key={product.id}
-                        className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
-                      >
-                        <div className="flex-1">
-                          <h3 className="text-white font-medium">{product.nome}</h3>
-                          <div className="flex gap-4 text-sm text-white/70">
-                            <span>ID: {product.id}</span>
-                            {product.codigo && <span>Código: {product.codigo}</span>}
-                            {product.preco && <span>Preço: R$ {product.preco}</span>}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-white border-white/20">
-                            {product.situacao || "Ativo"}
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => deleteProduct(product.id)}
-                            className="text-red-400 border-red-400/20 hover:bg-red-400/10"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Criar Produto */}
-          <TabsContent value="create" className="space-y-4">
-            <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-white">Criar Novo Produto</CardTitle>
-                <CardDescription className="text-white/70">
-                  Preencha os dados para criar um produto de teste
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="nome" className="text-white">
-                      Nome do Produto *
-                    </Label>
-                    <Input
-                      id="nome"
-                      value={formData.nome}
-                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                      placeholder="Ex: Produto Teste Homologação"
-                      className="bg-white/10 border-white/20 text-white"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="codigo" className="text-white">
-                      Código do Produto *
-                    </Label>
-                    <Input
-                      id="codigo"
-                      value={formData.codigo}
-                      onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
-                      placeholder="Ex: TESTE001"
-                      className="bg-white/10 border-white/20 text-white"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="preco" className="text-white">
-                    Preço
-                  </Label>
-                  <Input
-                    id="preco"
-                    type="number"
-                    step="0.01"
-                    value={formData.preco}
-                    onChange={(e) => setFormData({ ...formData, preco: e.target.value })}
-                    placeholder="Ex: 99.90"
-                    className="bg-white/10 border-white/20 text-white"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="descricao" className="text-white">
-                    Descrição
-                  </Label>
-                  <Textarea
-                    id="descricao"
-                    value={formData.descricao}
-                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                    placeholder="Descrição do produto para homologação..."
-                    className="bg-white/10 border-white/20 text-white"
-                  />
-                </div>
-
-                <Button onClick={createProduct} disabled={loading} className="w-full bg-green-600 hover:bg-green-700">
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Criando...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Criar Produto
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {/* Instruções */}
-        <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Processo de Homologação
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-white/70 space-y-2">
-            <p>✅ 1. Listar produtos existentes (READ)</p>
-            <p>✅ 2. Criar novo produto (CREATE)</p>
-            <p>✅ 3. Editar produto existente (UPDATE)</p>
-            <p>✅ 4. Excluir produto (DELETE)</p>
-            <p className="text-green-400 font-medium">🎯 Execute todas as operações para completar a homologação!</p>
+              <div>
+                <Label htmlFor="preco">Preço</Label>
+                <Input
+                  id="preco"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.preco}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, preco: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="descricao">Descrição</Label>
+              <Textarea
+                id="descricao"
+                value={formData.descricao}
+                onChange={(e) => setFormData((prev) => ({ ...prev, descricao: e.target.value }))}
+                placeholder="Descrição do produto"
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label htmlFor="estoque">Estoque</Label>
+              <Input
+                id="estoque"
+                type="number"
+                min="0"
+                value={formData.estoque}
+                onChange={(e) => setFormData((prev) => ({ ...prev, estoque: e.target.value }))}
+                placeholder="0"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={createProduct} disabled={!formData.nome.trim()}>
+                <Save className="h-4 w-4 mr-2" />
+                Criar Produto
+              </Button>
+              <Button variant="outline" onClick={() => setShowForm(false)}>
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
+            </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Lista de Produtos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Produtos Cadastrados</CardTitle>
+          <CardDescription>{loading ? "Carregando..." : `${products.length} produto(s) encontrado(s)`}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center space-x-4">
+                  <Skeleton className="h-12 w-12 rounded" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-4 w-[250px]" />
+                    <Skeleton className="h-4 w-[200px]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>Nenhum produto cadastrado ainda.</p>
+              <p className="text-sm mt-2">Clique em "Adicionar Produto" para começar.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {products.map((product) => (
+                <div key={product.id} className="border rounded-lg p-4">
+                  {editingId === product.id ? (
+                    <EditProductForm product={product} onSave={updateProduct} onCancel={() => setEditingId(null)} />
+                  ) : (
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold">{product.nome}</h3>
+                          {product.bling_id && <Badge variant="secondary">Bling: {product.bling_id}</Badge>}
+                        </div>
+                        {product.descricao && <p className="text-sm text-muted-foreground mb-2">{product.descricao}</p>}
+                        <div className="flex items-center gap-4 text-sm">
+                          <span>Preço: R$ {product.preco}</span>
+                          <span>Estoque: {product.estoque}</span>
+                          <span className="text-muted-foreground">ID: {product.id}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-2">
+                          Criado: {new Date(product.created_at).toLocaleString("pt-BR")}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        <Button variant="outline" size="sm" onClick={() => setEditingId(product.id)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => deleteProduct(product.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// Componente para edição inline
+function EditProductForm({
+  product,
+  onSave,
+  onCancel,
+}: {
+  product: Product
+  onSave: (id: number, data: Partial<Product>) => void
+  onCancel: () => void
+}) {
+  const [editData, setEditData] = useState({
+    nome: product.nome,
+    descricao: product.descricao,
+    preco: product.preco,
+    estoque: product.estoque.toString(),
+  })
+
+  const handleSave = () => {
+    onSave(product.id, {
+      nome: editData.nome.trim(),
+      descricao: editData.descricao.trim(),
+      preco: editData.preco,
+      estoque: Number.parseInt(editData.estoque) || 0,
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor={`edit-nome-${product.id}`}>Nome</Label>
+          <Input
+            id={`edit-nome-${product.id}`}
+            value={editData.nome}
+            onChange={(e) => setEditData((prev) => ({ ...prev, nome: e.target.value }))}
+          />
+        </div>
+        <div>
+          <Label htmlFor={`edit-preco-${product.id}`}>Preço</Label>
+          <Input
+            id={`edit-preco-${product.id}`}
+            value={editData.preco}
+            onChange={(e) => setEditData((prev) => ({ ...prev, preco: e.target.value }))}
+          />
+        </div>
+      </div>
+      <div>
+        <Label htmlFor={`edit-descricao-${product.id}`}>Descrição</Label>
+        <Textarea
+          id={`edit-descricao-${product.id}`}
+          value={editData.descricao}
+          onChange={(e) => setEditData((prev) => ({ ...prev, descricao: e.target.value }))}
+          rows={2}
+        />
+      </div>
+      <div>
+        <Label htmlFor={`edit-estoque-${product.id}`}>Estoque</Label>
+        <Input
+          id={`edit-estoque-${product.id}`}
+          type="number"
+          min="0"
+          value={editData.estoque}
+          onChange={(e) => setEditData((prev) => ({ ...prev, estoque: e.target.value }))}
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button onClick={handleSave} size="sm">
+          <Save className="h-4 w-4 mr-2" />
+          Salvar
+        </Button>
+        <Button variant="outline" onClick={onCancel} size="sm">
+          <X className="h-4 w-4 mr-2" />
+          Cancelar
+        </Button>
       </div>
     </div>
   )
