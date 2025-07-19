@@ -15,18 +15,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Configuração do Bling incompleta" }, { status: 500 })
     }
 
+    // Codificar credenciais em Base64 conforme RFC 6749
+    const credentials = Buffer.from(`${process.env.CLIENT_ID}:${process.env.CLIENT_SECRET}`).toString("base64")
+
     // Trocar código por token
     const tokenResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
+        Authorization: `Basic ${credentials}`,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code: code,
-        client_id: process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
         redirect_uri: process.env.REDIRECT_URI || "",
       }),
     })
