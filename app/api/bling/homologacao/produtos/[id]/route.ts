@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const elapsed = Date.now() - t0
     logBlingApiCall("GET", `/api/bling/homologacao/produtos/${params.id}`, requestId, elapsed, false)
     return NextResponse.json(handleBlingApiError(err, "GET_PRODUCT"), {
-      status: err.message === "ID inválido" ? 400 : 500,
+      status: (err instanceof Error && err.message === "ID inválido") ? 400 : 500,
     })
   }
 }
@@ -92,7 +92,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const elapsed = Date.now() - t0
     logBlingApiCall("DELETE", `/api/bling/homologacao/produtos/${params.id}`, requestId, elapsed, false)
     return NextResponse.json(handleBlingApiError(err, "DELETE_PRODUCT"), {
-      status: err.message === "ID inválido" ? 400 : 500,
+      status: (err instanceof Error && err.message === "ID inválido") ? 400 : 500,
     })
   }
 }
