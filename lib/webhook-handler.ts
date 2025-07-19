@@ -1,121 +1,185 @@
-/**
- * Handler avançado para webhooks do Bling
- * Baseado na documentação: https://developer.bling.com.br/webhooks
- */
-
-import crypto from "crypto"
-import { NextResponse } from "next/server"
-import { handleBlingError, logRequest } from "./bling-error-handler"
-
-const WEBHOOK_SECRET = process.env.BLING_WEBHOOK_SECRET
-
-export interface WebhookEvent {
-  event: string
-  data: any
-  timestamp: string
-  signature: string
-}
-
-export class BlingWebhookHandler {
-  private secret: string
-  private handlers: Map<string, (data: any) => Promise<void>> = new Map()
-
-  constructor(secret: string) {
-    this.secret = secret
-  }
-
-  // Validar assinatura do webhook
-  validateSignature(payload: string, signature: string): boolean {
-    const expectedSignature = crypto.createHmac("sha256", this.secret).update(payload).digest("hex")
-
-    return crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expectedSignature, "hex"))
-  }
-
-  // Registrar handler para evento
-  on(event: string, handler: (data: any) => Promise<void>) {
-    this.handlers.set(event, handler)
-  }
-
-  // Processar webhook
-  async process(event: WebhookEvent): Promise<void> {
-    const handler = this.handlers.get(event.event)
-    if (handler) {
-      await handler(event.data)
-    } else {
-      console.warn(`No handler registered for event: ${event.event}`)
-    }
-  }
-
-  // Handlers padrão
-  setupDefaultHandlers() {
-    // Produto criado
-    this.on("produto.criado", async (data) => {
-      console.log("Produto criado:", data)
-      // Sincronizar com banco local
-    })
-
-    // Produto atualizado
-    this.on("produto.atualizado", async (data) => {
-      console.log("Produto atualizado:", data)
-      // Atualizar banco local
-    })
-
-    // Produto excluído
-    this.on("produto.excluido", async (data) => {
-      console.log("Produto excluído:", data)
-      // Remover do banco local
-    })
-
-    // Estoque atualizado
-    this.on("estoque.atualizado", async (data) => {
-      console.log("Estoque atualizado:", data)
-      // Sincronizar estoque
-    })
-
-    // Pedido criado
-    this.on("pedido.criado", async (data) => {
-      console.log("Pedido criado:", data)
-      // Processar novo pedido
-    })
-
-    // NFe autorizada
-    this.on("nfe.autorizada", async (data) => {
-      console.log("NFe autorizada:", data)
-      // Atualizar status do pedido
-    })
-  }
-}
+import { getPool } from "./db"
+import type { BlingWebhookEvent } from "@/types/bling"
 
 /**
- * Verifica a assinatura do Bling (simplificada: compara o header "x-bling-signature")
+ * Processa eventos de webhook recebidos do Bling
  */
-function isValidSignature(req: Request): boolean {
-  if (!WEBHOOK_SECRET) return false
-  const header = req.headers.get("x-bling-signature") ?? ""
-  return header === WEBHOOK_SECRET
-}
-
-/**
- * Função exportada que processará eventos de webhook
- */
-export async function handleWebhookEvent(req: Request): Promise<Response> {
-  const requestId = crypto.randomUUID()
-  const handler = new BlingWebhookHandler(WEBHOOK_SECRET ?? "")
+export async function handleWebhookEvent(event: BlingWebhookEvent): Promise<boolean> {
+  const pool = getPool()
 
   try {
-    if (!isValidSignature(req)) {
-      return NextResponse.json({ success: false, message: "Assinatura inválida" }, { status: 401 })
+    console.log("📨 Processando webhook event:", event.evento?.tipo)
+
+    // Salva o evento no banco para auditoria
+    await pool.query(
+      `INSERT INTO webhook_events (event_type, event_data, processed)
+       VALUES ($1, $2, $3)`,
+      [event.evento?.tipo || "unknown", JSON.stringify(event), false],
+    )
+
+    // Processa baseado no tipo de evento
+    switch (event.evento?.tipo) {
+      case "produto":
+        return await handleProductWebhook(event)
+      case "pedido":
+        return await handleOrderWebhook(event)
+      case "estoque":
+        return await handleStockWebhook(event)
+      case "contato":
+        return await handleContactWebhook(event)
+      default:
+        console.log(`⚠️ Tipo de webhook não tratado: ${event.evento?.tipo}`)
+        return true // Marca como processado mesmo que não tenha ação específica
+    }
+  } catch (error) {
+    console.error("❌ Erro ao processar webhook:", error)
+    return false
+  }
+}
+
+/**
+ * Processa webhooks de produtos
+ */
+async function handleProductWebhook(event: BlingWebhookEvent): Promise<boolean> {
+  const pool = getPool()
+
+  try {
+    const productId = event.retorno?.id
+    if (!productId) {
+      console.error("❌ ID do produto não encontrado no webhook")
+      return false
     }
 
-    const event = await req.json()
-    logRequest(requestId, { event })
+    // Aqui você pode implementar a lógica específica para produtos
+    // Por exemplo: sincronizar dados do produto, atualizar cache, etc.
 
-    handler.setupDefaultHandlers()
-    await handler.process(event)
+    console.log(`✅ Webhook de produto processado: ${productId}`)
+    return true
+  } catch (error) {
+    console.error("❌ Erro ao processar webhook de produto:", error)
+    return false
+  }
+}
 
-    return NextResponse.json({ success: true })
-  } catch (err) {
-    const error = handleBlingError(err)
-    return NextResponse.json({ success: false, error }, { status: error.statusCode })
+/**
+ * Processa webhooks de pedidos
+ */
+async function handleOrderWebhook(event: BlingWebhookEvent): Promise<boolean> {
+  const pool = getPool()
+
+  try {
+    const orderId = event.retorno?.id
+    if (!orderId) {
+      console.error("❌ ID do pedido não encontrado no webhook")
+      return false
+    }
+
+    // Implementar lógica específica para pedidos
+    console.log(`✅ Webhook de pedido processado: ${orderId}`)
+    return true
+  } catch (error) {
+    console.error("❌ Erro ao processar webhook de pedido:", error)
+    return false
+  }
+}
+
+/**
+ * Processa webhooks de estoque
+ */
+async function handleStockWebhook(event: BlingWebhookEvent): Promise<boolean> {
+  const pool = getPool()
+
+  try {
+    const productId = event.retorno?.id
+    if (!productId) {
+      console.error("❌ ID do produto não encontrado no webhook de estoque")
+      return false
+    }
+
+    // Implementar lógica específica para estoque
+    console.log(`✅ Webhook de estoque processado: ${productId}`)
+    return true
+  } catch (error) {
+    console.error("❌ Erro ao processar webhook de estoque:", error)
+    return false
+  }
+}
+
+/**
+ * Processa webhooks de contatos
+ */
+async function handleContactWebhook(event: BlingWebhookEvent): Promise<boolean> {
+  const pool = getPool()
+
+  try {
+    const contactId = event.retorno?.id
+    if (!contactId) {
+      console.error("❌ ID do contato não encontrado no webhook")
+      return false
+    }
+
+    // Implementar lógica específica para contatos
+    console.log(`✅ Webhook de contato processado: ${contactId}`)
+    return true
+  } catch (error) {
+    console.error("❌ Erro ao processar webhook de contato:", error)
+    return false
+  }
+}
+
+/**
+ * Valida a assinatura do webhook do Bling
+ */
+export function validateWebhookSignature(payload: string, signature: string): boolean {
+  const crypto = require("crypto")
+  const secret = process.env.BLING_WEBHOOK_SECRET
+
+  if (!secret) {
+    console.error("❌ BLING_WEBHOOK_SECRET não configurado")
+    return false
+  }
+
+  const expectedSignature = crypto.createHmac("sha256", secret).update(payload).digest("hex")
+
+  return signature === expectedSignature
+}
+
+/**
+ * Marca um evento de webhook como processado
+ */
+export async function markWebhookAsProcessed(eventId: number): Promise<boolean> {
+  const pool = getPool()
+
+  try {
+    await pool.query(
+      `UPDATE webhook_events 
+       SET processed = true, processed_at = NOW() 
+       WHERE id = $1`,
+      [eventId],
+    )
+    return true
+  } catch (error) {
+    console.error("❌ Erro ao marcar webhook como processado:", error)
+    return false
+  }
+}
+
+/**
+ * Obtém eventos de webhook não processados
+ */
+export async function getUnprocessedWebhooks(): Promise<any[]> {
+  const pool = getPool()
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM webhook_events 
+       WHERE processed = false 
+       ORDER BY created_at ASC 
+       LIMIT 100`,
+    )
+    return result.rows
+  } catch (error) {
+    console.error("❌ Erro ao buscar webhooks não processados:", error)
+    return []
   }
 }

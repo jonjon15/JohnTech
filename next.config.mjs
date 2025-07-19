@@ -1,10 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  swcMinify: true,
   experimental: {
-    serverActions: true,
-    serverComponentsExternalPackages: ["pg"], // Adicione 'pg' aqui para Server Components
+    serverComponentsExternalPackages: ["pg"],
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -16,22 +13,34 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "www.bling.com.br",
-      },
-      {
-        protocol: "https",
-        hostname: "via.placeholder.com",
-      },
-      {
-        protocol: "https",
-        hostname: "placehold.co",
-      },
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
+        hostname: "**",
       },
     ],
     unoptimized: true,
+  },
+  env: {
+    CUSTOM_KEY: process.env.CUSTOM_KEY,
+  },
+  async headers() {
+    return [
+      {
+        source: "/api/bling/webhooks",
+        headers: [
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*",
+          },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "POST, GET, OPTIONS",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value: "Content-Type, x-bling-signature",
+          },
+        ],
+      },
+    ]
   },
 }
 
