@@ -16,7 +16,7 @@ CLIENT_SECRET=seu_client_secret
 BLING_WEBHOOK_SECRET=09cd0c191a2d7d849609870b9166ab3b74e76ba95df54f0237bce24fb2af1e8b
 BLING_API_URL=https://www.bling.com.br/Api/v3
 DATABASE_URL=sua_url_do_postgres
-BASE_URL=https://johntech.vercel.app
+NEXT_PUBLIC_BASE_URL=https://johntech.vercel.app
 \`\`\`
 
 ## 2. Deploy
