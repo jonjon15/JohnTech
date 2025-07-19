@@ -2,8 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
 import { getUserInfo } from "@/lib/userInfo" // Declare the getUserInfo variable
 
-const BLING_CLIENT_ID = process.env.BLING_CLIENT_ID!
-const BLING_CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
+const CLIENT_ID = process.env.CLIENT_ID!
+const CLIENT_SECRET = process.env.CLIENT_SECRET!
 const REDIRECT_URI = process.env.REDIRECT_URI!
 
 export async function GET(request: NextRequest) {
@@ -74,16 +74,16 @@ export async function GET(request: NextRequest) {
 async function exchangeCodeForToken(code: string) {
   try {
     console.log("Trocando código por token...")
-    console.log("Client ID:", BLING_CLIENT_ID ? "✓ OK" : "✗ MISSING")
-    console.log("Client Secret:", BLING_CLIENT_SECRET ? "✓ OK" : "✗ MISSING")
+    console.log("Client ID:", CLIENT_ID ? "✓ OK" : "✗ MISSING")
+    console.log("Client Secret:", CLIENT_SECRET ? "✓ OK" : "✗ MISSING")
     console.log("Redirect URI:", REDIRECT_URI)
 
-    if (!BLING_CLIENT_ID || !BLING_CLIENT_SECRET) {
+    if (!CLIENT_ID || !CLIENT_SECRET) {
       throw new Error("Credenciais do Bling não configuradas")
     }
 
     // Codificar credenciais em Base64 conforme RFC 6749
-    const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
+    const credentials = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")
 
     const formData = new URLSearchParams({
       grant_type: "authorization_code",

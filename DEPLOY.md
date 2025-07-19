@@ -11,12 +11,12 @@
 Configure no Vercel (Settings → Environment Variables):
 
 \`\`\`env
-BLING_CLIENT_ID=seu_client_id
-BLING_CLIENT_SECRET=seu_client_secret
+CLIENT_ID=seu_client_id
+CLIENT_SECRET=seu_client_secret
 BLING_WEBHOOK_SECRET=09cd0c191a2d7d849609870b9166ab3b74e76ba95df54f0237bce24fb2af1e8b
 BLING_API_URL=https://www.bling.com.br/Api/v3
 DATABASE_URL=sua_url_do_postgres
-NEXT_PUBLIC_BASE_URL=https://johntech.vercel.app
+BASE_URL=https://johntech.vercel.app
 \`\`\`
 
 ## 2. Deploy
@@ -68,7 +68,7 @@ node scripts/post-deploy-check.js
 ## Troubleshooting
 
 ### Erro 500 na autenticação
-- Verificar se `BLING_CLIENT_ID` e `BLING_CLIENT_SECRET` estão corretos
+- Verificar se `CLIENT_ID` e `CLIENT_SECRET` estão corretos
 - Verificar se a URL de callback está configurada no Bling
 
 ### Webhooks não funcionam

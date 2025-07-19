@@ -3,13 +3,13 @@ import { randomBytes } from "crypto"
 
 export async function GET(request: NextRequest) {
   try {
-    const clientId = process.env.BLING_CLIENT_ID
+    const clientId = process.env.CLIENT_ID
     const redirectUri = process.env.REDIRECT_URI
 
     if (!clientId || !redirectUri) {
       return NextResponse.json(
         {
-          error: "BLING_CLIENT_ID ou REDIRECT_URI não configurado",
+          error: "CLIENT_ID ou REDIRECT_URI não configurado",
         },
         { status: 500 },
       )

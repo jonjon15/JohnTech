@@ -1,6 +1,6 @@
 const https = require("https")
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://johntech.vercel.app"
+const NEXT_PUBLIC_BASE_URL = process.env.BASE_URL || "https://johntech.vercel.app"
 
 console.log("🚀 Verificando deploy...\n")
 
@@ -8,7 +8,7 @@ const endpoints = ["/api/auth/bling/status", "/api/bling/status", "/api/db/statu
 
 async function checkEndpoint(endpoint) {
   return new Promise((resolve) => {
-    const url = `${BASE_URL}${endpoint}`
+    const url = `${NEXT_PUBLIC_BASE_URL}${endpoint}`
 
     https
       .get(url, (res) => {
@@ -28,7 +28,7 @@ async function checkEndpoint(endpoint) {
 }
 
 async function runChecks() {
-  console.log(`Testando endpoints em: ${BASE_URL}\n`)
+  console.log(`Testando endpoints em: ${NEXT_PUBLIC_BASE_URL}\n`)
 
   const results = await Promise.all(endpoints.map((endpoint) => checkEndpoint(endpoint)))
 

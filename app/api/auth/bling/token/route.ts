@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se as variáveis de ambiente estão configuradas
-    if (!process.env.BLING_CLIENT_ID || !process.env.BLING_CLIENT_SECRET) {
+    if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET) {
       console.error("Variáveis de ambiente do Bling não configuradas")
       return NextResponse.json({ error: "Configuração do Bling incompleta" }, { status: 500 })
     }
@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code: code,
-        client_id: process.env.BLING_CLIENT_ID,
-        client_secret: process.env.BLING_CLIENT_SECRET,
+        client_id: process.env.CLIENT_ID,
+        client_secret: process.env.CLIENT_SECRET,
       }),
     })
 

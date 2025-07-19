@@ -21,8 +21,8 @@ export async function GET() {
       status: "ok",
       timestamp: new Date().toISOString(),
       oauth: {
-        client_id: process.env.BLING_CLIENT_ID ? "configured" : "missing",
-        client_secret: process.env.BLING_CLIENT_SECRET ? "configured" : "missing",
+        client_id: process.env.CLIENT_ID ? "configured" : "missing",
+        client_secret: process.env.CLIENT_SECRET ? "configured" : "missing",
         redirect_uri: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`,
       },
       tokens: {

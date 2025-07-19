@@ -25,8 +25,8 @@ requiredFiles.forEach((file) => {
 
 console.log("\n🔧 Verificando variáveis de ambiente...")
 const requiredEnvVars = [
-  "BLING_CLIENT_ID",
-  "BLING_CLIENT_SECRET",
+  "CLIENT_ID",
+  "CLIENT_SECRET",
   "BLING_WEBHOOK_SECRET",
   "DATABASE_URL",
   "NEXT_PUBLIC_BASE_URL",

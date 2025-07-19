@@ -49,8 +49,8 @@ async function refreshAccessToken(userEmail: string, refreshToken: string): Prom
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,
-        client_id: process.env.BLING_CLIENT_ID!,
-        client_secret: process.env.BLING_CLIENT_SECRET!,
+        client_id: process.env.CLIENT_ID!,
+        client_secret: process.env.CLIENT_SECRET!,
       }),
     })
 

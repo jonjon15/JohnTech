@@ -8,8 +8,8 @@ const nextConfig = {
   },
   env: {
     BLING_API_URL: process.env.BLING_API_URL,
-    BLING_CLIENT_ID: process.env.BLING_CLIENT_ID,
-    BLING_CLIENT_SECRET: process.env.BLING_CLIENT_SECRET,
+    CLIENT_ID: process.env.CLIENT_ID,
+    CLIENT_SECRET: process.env.CLIENT_SECRET,
   },
   eslint: {
     ignoreDuringBuilds: true,
