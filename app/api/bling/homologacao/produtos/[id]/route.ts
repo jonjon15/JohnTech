@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server"
 import { getValidAccessToken } from "@/lib/bling-auth"
-import { handleBlingApiError, createBlingApiResponse, logBlingApiCall } from "@/lib/bling-error-handler"
+import {
+  handleBlingApiError,
+  createBlingApiResponse,
+  logBlingApiCall,
+} from "@/lib/bling-error-handler"
 
 const userEmail = "admin@johntech.com"
 const REQUEST_TIMEOUT = 8000
+
+const buildBlingUrl = (path: string) =>
+  `${process.env.BLING_API_URL || "https://api.bling.com.br"}${path.startsWith("/") ? "" : "/"}${path}`
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const startTime = Date.now()
@@ -19,8 +26,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       })
     }
 
-    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
-    const url = `${blingApiUrl}/homologacao/produtos/${params.id}`
+    const url = buildBlingUrl(`/homologacao/produtos/${params.id}`)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
@@ -78,10 +84,16 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }
 
     const productData = await request.json()
+    if (!productData || typeof productData !== "object") {
+      return NextResponse.json(
+        handleBlingApiError(new Error("Payload inválido"), "UPDATE_HOMOLOG_PRODUCT"),
+        { status: 400 },
+      )
+    }
+
     console.log(`📝 [${requestId}] Dados para atualização:`, JSON.stringify(productData, null, 2))
 
-    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
-    const url = `${blingApiUrl}/homologacao/produtos/${params.id}`
+    const url = buildBlingUrl(`/homologacao/produtos/${params.id}`)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
@@ -139,8 +151,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       })
     }
 
-    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
-    const url = `${blingApiUrl}/homologacao/produtos/${params.id}`
+    const url = buildBlingUrl(`/homologacao/produtos/${params.id}`)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
