@@ -1,20 +1,12 @@
 import { sql } from "@vercel/postgres"
 
-interface BlingToken {
-  access_token: string
-  refresh_token: string
-  expires_at: string
-}
-
 export async function getValidAccessToken(userEmail: string, forceRefresh = false): Promise<string | null> {
   try {
-    // Buscar token atual do banco
-    const result = await sql<BlingToken>`
+    // Buscar token no banco
+    const result = await sql`
       SELECT access_token, refresh_token, expires_at 
       FROM bling_tokens 
       WHERE user_email = ${userEmail}
-      ORDER BY created_at DESC 
-      LIMIT 1
     `
 
     if (result.rows.length === 0) {
@@ -23,17 +15,21 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
     }
 
     const tokenData = result.rows[0]
-    const expiresAt = new Date(tokenData.expires_at)
     const now = new Date()
-    const isExpired = now >= expiresAt
+    const expiresAt = new Date(tokenData.expires_at)
 
-    // Se não está expirado e não é refresh forçado, retorna o token atual
-    if (!isExpired && !forceRefresh) {
+    // Se o token ainda é válido e não foi forçado o refresh
+    if (!forceRefresh && expiresAt > now) {
       return tokenData.access_token
     }
 
     // Token expirado ou refresh forçado - tentar renovar
     console.log("Token expirado ou refresh forçado. Renovando...")
+
+    if (!tokenData.refresh_token) {
+      console.error("Refresh token não encontrado")
+      return null
+    }
 
     const refreshResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
@@ -57,13 +53,14 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
     const newTokenData = await refreshResponse.json()
     const newExpiresAt = new Date(Date.now() + newTokenData.expires_in * 1000)
 
-    // Atualizar token no banco
+    // Salvar novo token no banco
     await sql`
       UPDATE bling_tokens 
-      SET access_token = ${newTokenData.access_token},
-          refresh_token = ${newTokenData.refresh_token},
-          expires_at = ${newExpiresAt},
-          updated_at = NOW()
+      SET 
+        access_token = ${newTokenData.access_token},
+        refresh_token = ${newTokenData.refresh_token || tokenData.refresh_token},
+        expires_at = ${newExpiresAt.toISOString()},
+        updated_at = NOW()
       WHERE user_email = ${userEmail}
     `
 
@@ -75,11 +72,25 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
   }
 }
 
-export async function clearTokens(userEmail: string): Promise<void> {
+export async function saveTokens(userEmail: string, accessToken: string, refreshToken: string, expiresIn: number) {
   try {
-    await sql`DELETE FROM bling_tokens WHERE user_email = ${userEmail}`
-    console.log("Tokens removidos para:", userEmail)
+    const expiresAt = new Date(Date.now() + expiresIn * 1000)
+
+    await sql`
+      INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at, created_at, updated_at)
+      VALUES (${userEmail}, ${accessToken}, ${refreshToken}, ${expiresAt.toISOString()}, NOW(), NOW())
+      ON CONFLICT (user_email) 
+      DO UPDATE SET 
+        access_token = ${accessToken},
+        refresh_token = ${refreshToken},
+        expires_at = ${expiresAt.toISOString()},
+        updated_at = NOW()
+    `
+
+    console.log("Tokens salvos com sucesso para:", userEmail)
+    return true
   } catch (error) {
-    console.error("Erro ao remover tokens:", error)
+    console.error("Erro ao salvar tokens:", error)
+    return false
   }
 }

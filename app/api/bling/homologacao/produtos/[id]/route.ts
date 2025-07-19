@@ -1,78 +1,74 @@
 import { NextResponse } from "next/server"
 import { getValidAccessToken } from "@/lib/bling-auth"
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  const id = params.id
-  const userEmail = "admin@johntech.com"
+const userEmail = "admin@johntech.com"
 
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
+    const { id } = params
+    console.log("Buscando produto ID:", id)
+
     let token = await getValidAccessToken(userEmail)
     if (!token) {
-      return NextResponse.json(
-        { error: "Token de acesso Bling não encontrado. Por favor, reautentique." },
-        { status: 401 },
-      )
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 })
     }
 
-    let response = await fetch(`${process.env.BLING_API_URL}/homologacao/produtos/${id}`, {
-      method: "GET",
+    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+    let response = await fetch(`${blingApiUrl}/homologacao/produtos/${id}`, {
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
     })
 
     if (response.status === 401) {
       token = await getValidAccessToken(userEmail, true)
       if (!token) {
-        return NextResponse.json(
-          { error: "Token de acesso Bling não encontrado. Por favor, reautentique." },
-          { status: 401 },
-        )
+        return NextResponse.json({ error: "Falha ao renovar token" }, { status: 401 })
       }
-      response = await fetch(`${process.env.BLING_API_URL}/homologacao/produtos/${id}`, {
-        method: "GET",
+
+      response = await fetch(`${blingApiUrl}/homologacao/produtos/${id}`, {
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          Accept: "application/json",
         },
       })
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: "Erro desconhecido" }))
-      console.error("Erro ao obter produto:", response.status, errorData)
-      return NextResponse.json({ error: "Erro ao obter produto", details: errorData }, { status: response.status })
+      const errorText = await response.text()
+      return NextResponse.json(
+        { error: `Erro ao buscar produto: ${response.status}`, details: errorText },
+        { status: response.status },
+      )
     }
 
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error: any) {
-    console.error("Erro ao obter produto:", error)
-    return NextResponse.json({ error: "Erro interno do servidor", message: error.message }, { status: 500 })
+    console.error("Erro ao buscar produto:", error)
+    return NextResponse.json({ error: "Erro interno", message: error.message }, { status: 500 })
   }
 }
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
-  const id = params.id
-  const userEmail = "admin@johntech.com"
-
   try {
+    const { id } = params
+    const body = await request.json()
+    console.log("Atualizando produto ID:", id, "com dados:", body)
+
     let token = await getValidAccessToken(userEmail)
     if (!token) {
-      return NextResponse.json(
-        { error: "Token de acesso Bling não encontrado. Por favor, reautentique." },
-        { status: 401 },
-      )
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 })
     }
 
-    const body = await request.json()
-
-    let response = await fetch(`${process.env.BLING_API_URL}/homologacao/produtos/${id}`, {
+    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+    let response = await fetch(`${blingApiUrl}/homologacao/produtos/${id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
       body: JSON.stringify(body),
     })
@@ -80,82 +76,81 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     if (response.status === 401) {
       token = await getValidAccessToken(userEmail, true)
       if (!token) {
-        return NextResponse.json(
-          { error: "Token de acesso Bling não encontrado. Por favor, reautentique." },
-          { status: 401 },
-        )
+        return NextResponse.json({ error: "Falha ao renovar token" }, { status: 401 })
       }
-      response = await fetch(`${process.env.BLING_API_URL}/homologacao/produtos/${id}`, {
+
+      response = await fetch(`${blingApiUrl}/homologacao/produtos/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          Accept: "application/json",
         },
         body: JSON.stringify(body),
       })
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: "Erro desconhecido" }))
-      console.error("Erro ao atualizar produto:", response.status, errorData)
-      return NextResponse.json({ error: "Erro ao atualizar produto", details: errorData }, { status: response.status })
+      const errorText = await response.text()
+      return NextResponse.json(
+        { error: `Erro ao atualizar produto: ${response.status}`, details: errorText },
+        { status: response.status },
+      )
     }
 
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error: any) {
     console.error("Erro ao atualizar produto:", error)
-    return NextResponse.json({ error: "Erro interno do servidor", message: error.message }, { status: 500 })
+    return NextResponse.json({ error: "Erro interno", message: error.message }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
-  const id = params.id
-  const userEmail = "admin@johntech.com"
-
   try {
+    const { id } = params
+    console.log("Deletando produto ID:", id)
+
     let token = await getValidAccessToken(userEmail)
     if (!token) {
-      return NextResponse.json(
-        { error: "Token de acesso Bling não encontrado. Por favor, reautentique." },
-        { status: 401 },
-      )
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 })
     }
 
-    let response = await fetch(`${process.env.BLING_API_URL}/homologacao/produtos/${id}`, {
+    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+    let response = await fetch(`${blingApiUrl}/homologacao/produtos/${id}`, {
       method: "DELETE",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        Accept: "application/json",
       },
     })
 
     if (response.status === 401) {
       token = await getValidAccessToken(userEmail, true)
       if (!token) {
-        return NextResponse.json(
-          { error: "Token de acesso Bling não encontrado. Por favor, reautentique." },
-          { status: 401 },
-        )
+        return NextResponse.json({ error: "Falha ao renovar token" }, { status: 401 })
       }
-      response = await fetch(`${process.env.BLING_API_URL}/homologacao/produtos/${id}`, {
+
+      response = await fetch(`${blingApiUrl}/homologacao/produtos/${id}`, {
         method: "DELETE",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          Accept: "application/json",
         },
       })
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: "Erro desconhecido" }))
-      console.error("Erro ao excluir produto:", response.status, errorData)
-      return NextResponse.json({ error: "Erro ao excluir produto", details: errorData }, { status: response.status })
+      const errorText = await response.text()
+      return NextResponse.json(
+        { error: `Erro ao deletar produto: ${response.status}`, details: errorText },
+        { status: response.status },
+      )
     }
 
-    return new NextResponse(null, { status: 204 })
+    return NextResponse.json({ success: true, message: "Produto deletado com sucesso" })
   } catch (error: any) {
-    console.error("Erro ao excluir produto:", error)
-    return NextResponse.json({ error: "Erro interno do servidor", message: error.message }, { status: 500 })
+    console.error("Erro ao deletar produto:", error)
+    return NextResponse.json({ error: "Erro interno", message: error.message }, { status: 500 })
   }
 }

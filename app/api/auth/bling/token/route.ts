@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@vercel/postgres"
+import { saveTokens } from "@/lib/bling-auth"
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,6 +8,8 @@ export async function POST(request: NextRequest) {
     if (!code) {
       return NextResponse.json({ error: "Código de autorização não fornecido" }, { status: 400 })
     }
+
+    console.log("Iniciando troca de código por token...")
 
     // Trocar código por token
     const tokenResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
@@ -26,33 +28,26 @@ export async function POST(request: NextRequest) {
     })
 
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.json().catch(() => ({}))
-      console.error("Erro ao obter token:", tokenResponse.status, errorData)
-      return NextResponse.json({ error: "Falha ao obter token", details: errorData }, { status: tokenResponse.status })
+      const errorText = await tokenResponse.text()
+      console.error("Erro ao obter token:", tokenResponse.status, errorText)
+      return NextResponse.json({ error: "Falha ao obter token", details: errorText }, { status: tokenResponse.status })
     }
 
     const tokenData = await tokenResponse.json()
-    console.log("Token obtido com sucesso:", { ...tokenData, access_token: "***", refresh_token: "***" })
+    console.log("Token obtido com sucesso. Expires in:", tokenData.expires_in)
 
     // Salvar tokens no banco
     const userEmail = "admin@johntech.com"
-    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+    const success = await saveTokens(userEmail, tokenData.access_token, tokenData.refresh_token, tokenData.expires_in)
 
-    await sql`
-      INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at, created_at, updated_at)
-      VALUES (${userEmail}, ${tokenData.access_token}, ${tokenData.refresh_token}, ${expiresAt}, NOW(), NOW())
-      ON CONFLICT (user_email) 
-      DO UPDATE SET 
-        access_token = ${tokenData.access_token},
-        refresh_token = ${tokenData.refresh_token},
-        expires_at = ${expiresAt},
-        updated_at = NOW()
-    `
+    if (!success) {
+      return NextResponse.json({ error: "Falha ao salvar tokens" }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       message: "Token obtido e salvo com sucesso",
-      expires_at: expiresAt,
+      expires_in: tokenData.expires_in,
     })
   } catch (error: any) {
     console.error("Erro interno ao processar token:", error)

@@ -4,51 +4,48 @@ import { getValidAccessToken } from "@/lib/bling-auth"
 export async function GET() {
   try {
     const userEmail = "admin@johntech.com"
-    const accessToken = await getValidAccessToken(userEmail)
 
-    if (!accessToken) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Token de acesso não disponível. Faça a autenticação OAuth primeiro.",
-          authenticated: false,
-        },
-        { status: 401 },
-      )
+    // Verificar se temos um token válido
+    const token = await getValidAccessToken(userEmail)
+
+    if (!token) {
+      return NextResponse.json({
+        success: false,
+        authenticated: false,
+        message: "Nenhum token válido encontrado. Faça a autenticação OAuth.",
+      })
     }
 
-    // Testar conexão com a API do Bling
-    const response = await fetch(`${process.env.BLING_API_URL}/produtos?limite=1`, {
+    // Testar o token fazendo uma chamada simples para a API do Bling
+    const testResponse = await fetch(`${process.env.BLING_API_URL}/situacoes/modulos`, {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         Accept: "application/json",
       },
     })
 
-    if (response.ok) {
+    if (testResponse.ok) {
       return NextResponse.json({
         success: true,
-        message: "Conexão com API Bling funcionando corretamente",
         authenticated: true,
-        api_url: process.env.BLING_API_URL,
+        api_status: "connected",
+        message: "Token válido e API acessível",
       })
     } else {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Erro na API Bling: ${response.status}`,
-          authenticated: true,
-          api_url: process.env.BLING_API_URL,
-        },
-        { status: response.status },
-      )
+      return NextResponse.json({
+        success: false,
+        authenticated: true,
+        api_status: "error",
+        message: `API retornou status ${testResponse.status}`,
+      })
     }
   } catch (error: any) {
+    console.error("Erro ao verificar status do Bling:", error)
     return NextResponse.json(
       {
         success: false,
-        message: "Erro interno ao verificar status da API Bling",
-        error: error.message,
+        error: "Erro interno",
+        message: error.message,
       },
       { status: 500 },
     )
