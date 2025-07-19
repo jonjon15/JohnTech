@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { getUserInfo } from "@/lib/userInfo" // Declare the getUserInfo variable
 
 const BLING_CLIENT_ID = process.env.BLING_CLIENT_ID!
 const BLING_CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
@@ -77,6 +78,10 @@ async function exchangeCodeForToken(code: string) {
     console.log("Client Secret:", BLING_CLIENT_SECRET ? "✓ OK" : "✗ MISSING")
     console.log("Redirect URI:", REDIRECT_URI)
 
+    if (!BLING_CLIENT_ID || !BLING_CLIENT_SECRET) {
+      throw new Error("Credenciais do Bling não configuradas")
+    }
+
     // Codificar credenciais em Base64 conforme RFC 6749
     const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
 
@@ -88,6 +93,7 @@ async function exchangeCodeForToken(code: string) {
 
     console.log("Fazendo requisição para:", "https://www.bling.com.br/OAuth2/token")
     console.log("Body:", formData.toString())
+    console.log("Authorization Header:", `Basic ${credentials}`) // Log the Authorization header
 
     const response = await fetch("https://www.bling.com.br/OAuth2/token", {
       method: "POST",
@@ -202,26 +208,5 @@ async function saveTokensToDatabase(tokenData: any) {
   } catch (error) {
     console.error("Erro ao salvar tokens no banco:", error)
     throw error
-  }
-}
-
-async function getUserInfo(accessToken: string) {
-  try {
-    const response = await fetch("https://www.bling.com.br/Api/v3/usuarios", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-    })
-
-    if (!response.ok) {
-      return { success: false, error: "Falha ao buscar informações do usuário" }
-    }
-
-    const userData = await response.json()
-    return { success: true, data: userData.data || userData }
-  } catch (error) {
-    console.error("Erro ao buscar informações do usuário:", error)
-    return { success: false, error: "Erro na requisição" }
   }
 }
