@@ -1,19 +1,24 @@
 const https = require("https")
 
-const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://johntech.vercel.app"
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://johntech.vercel.app"
 
-console.log("🔍 Verificando deploy...\n")
+console.log("🚀 Verificando deploy...\n")
 
-const endpoints = ["/api/auth/bling/status", "/api/bling/webhooks/status", "/api/db/status", "/configuracao-bling"]
+const endpoints = ["/api/auth/bling/status", "/api/bling/status", "/api/db/status", "/configuracao-bling"]
 
 async function checkEndpoint(endpoint) {
   return new Promise((resolve) => {
-    const url = `${baseUrl}${endpoint}`
+    const url = `${BASE_URL}${endpoint}`
 
     https
       .get(url, (res) => {
-        console.log(`${res.statusCode === 200 ? "✅" : "❌"} ${endpoint} - Status: ${res.statusCode}`)
-        resolve(res.statusCode === 200)
+        if (res.statusCode === 200) {
+          console.log(`✅ ${endpoint} - OK`)
+          resolve(true)
+        } else {
+          console.log(`❌ ${endpoint} - Status: ${res.statusCode}`)
+          resolve(false)
+        }
       })
       .on("error", (err) => {
         console.log(`❌ ${endpoint} - Erro: ${err.message}`)
@@ -23,18 +28,18 @@ async function checkEndpoint(endpoint) {
 }
 
 async function runChecks() {
-  console.log("🌐 Testando endpoints:")
+  console.log(`Testando endpoints em: ${BASE_URL}\n`)
 
-  for (const endpoint of endpoints) {
-    await checkEndpoint(endpoint)
-    await new Promise((resolve) => setTimeout(resolve, 500)) // Delay entre requests
+  const results = await Promise.all(endpoints.map((endpoint) => checkEndpoint(endpoint)))
+
+  const allPassed = results.every((result) => result)
+
+  console.log("\n📋 RESUMO:")
+  if (allPassed) {
+    console.log("🎉 Deploy funcionando perfeitamente!")
+  } else {
+    console.log("⚠️  Alguns endpoints falharam - verifique os logs")
   }
-
-  console.log("\n🔐 Webhook Secret configurado:")
-  console.log(`${process.env.BLING_WEBHOOK_SECRET ? "✅" : "❌"} BLING_WEBHOOK_SECRET`)
-
-  console.log("\n🎉 Deploy verificado!")
-  console.log(`🔗 Acesse: ${baseUrl}/configuracao-bling`)
 }
 
-runChecks().catch(console.error)
+runChecks()

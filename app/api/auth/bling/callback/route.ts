@@ -6,23 +6,36 @@ const BLING_CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
 const BLING_TOKEN_URL = "https://www.bling.com.br/Api/v3/oauth/token"
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
+  const searchParams = request.nextUrl.searchParams
   const code = searchParams.get("code")
   const state = searchParams.get("state")
   const error = searchParams.get("error")
 
+  // Redireciona para a página de callback com os parâmetros
+  const callbackUrl = new URL("/auth/callback", request.url)
+
+  if (error) {
+    callbackUrl.searchParams.set("error", error)
+  }
+
+  if (code) {
+    callbackUrl.searchParams.set("code", code)
+  }
+
+  if (state) {
+    callbackUrl.searchParams.set("state", state)
+  }
+
   // Verifica se houve erro na autorização
   if (error) {
     console.error("Erro na autorização:", error)
-    return NextResponse.redirect(
-      new URL(`/auth/callback?error=authorization_failed&message=${encodeURIComponent(error)}`, request.url),
-    )
+    return NextResponse.redirect(callbackUrl)
   }
 
   // Verifica se o código foi recebido
   if (!code) {
     console.error("Código de autorização não recebido")
-    return NextResponse.redirect(new URL("/auth/callback?error=no_code", request.url))
+    return NextResponse.redirect(callbackUrl)
   }
 
   // Verifica o state (opcional, mas recomendado para segurança)
@@ -36,24 +49,25 @@ export async function GET(request: NextRequest) {
     const tokenResponse = await exchangeCodeForToken(code, request.url)
 
     if (!tokenResponse.success) {
-      return NextResponse.redirect(
-        new URL(`/auth/callback?error=token_failed&message=${encodeURIComponent(tokenResponse.error)}`, request.url),
-      )
+      callbackUrl.searchParams.set("error", "token_failed")
+      callbackUrl.searchParams.set("message", encodeURIComponent(tokenResponse.error))
+      return NextResponse.redirect(callbackUrl)
     }
 
     // Salva os tokens no banco de dados
     await saveTokensToDatabase(tokenResponse.data)
 
     // Redireciona para o dashboard com sucesso
-    return NextResponse.redirect(new URL("/dashboard?success=true", request.url))
+    callbackUrl.searchParams.set("success", "true")
+    return NextResponse.redirect(callbackUrl)
   } catch (error) {
     console.error("Erro no callback:", error)
-    return NextResponse.redirect(
-      new URL(
-        `/auth/callback?error=callback_failed&message=${encodeURIComponent(error instanceof Error ? error.message : "Erro desconhecido")}`,
-        request.url,
-      ),
+    callbackUrl.searchParams.set("error", "callback_failed")
+    callbackUrl.searchParams.set(
+      "message",
+      encodeURIComponent(error instanceof Error ? error.message : "Erro desconhecido"),
     )
+    return NextResponse.redirect(callbackUrl)
   }
 }
 

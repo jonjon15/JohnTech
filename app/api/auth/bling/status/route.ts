@@ -6,30 +6,27 @@ export async function GET() {
     const clientSecret = process.env.BLING_CLIENT_SECRET
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
 
-    if (!clientId || !clientSecret) {
-      return NextResponse.json(
-        {
-          status: "error",
-          message: "Credenciais do Bling não configuradas",
-          configured: false,
-        },
-        { status: 500 },
-      )
+    const status = {
+      client_id_configured: !!clientId,
+      client_secret_configured: !!clientSecret,
+      base_url_configured: !!baseUrl,
+      callback_url: baseUrl ? `${baseUrl}/auth/callback` : "URL base não configurada",
+      timestamp: new Date().toISOString(),
     }
 
+    const allConfigured = status.client_id_configured && status.client_secret_configured && status.base_url_configured
+
     return NextResponse.json({
-      status: "ready",
-      message: "Autenticação Bling configurada",
-      configured: true,
-      authUrl: `${baseUrl}/api/auth/bling`,
-      callbackUrl: `${baseUrl}/auth/callback`,
+      status: allConfigured ? "ok" : "error",
+      message: allConfigured ? "OAuth configurado corretamente" : "Configuração OAuth incompleta",
+      ...status,
     })
   } catch (error) {
-    console.error("Erro ao verificar status da autenticação:", error)
     return NextResponse.json(
       {
         status: "error",
-        message: "Erro interno do servidor",
+        message: "Erro ao verificar status OAuth",
+        error: error instanceof Error ? error.message : "Erro desconhecido",
       },
       { status: 500 },
     )

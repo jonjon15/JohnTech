@@ -1,55 +1,53 @@
 -- Teste de integração do banco de dados
--- Verifica se as tabelas necessárias existem
+-- Verifica se as tabelas necessárias existem e estão funcionando
 
--- Verificar se a tabela de usuários existe
-SELECT 
-  CASE 
-    WHEN EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_name = 'users'
-    ) 
-    THEN 'users table exists ✅'
-    ELSE 'users table missing ❌'
-  END as users_status;
+-- Verificar tabela de usuários
+SELECT 'users table' as test_name, 
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users') 
+            THEN 'PASS' ELSE 'FAIL' END as result;
 
--- Verificar se a tabela de tokens existe  
-SELECT 
-  CASE 
-    WHEN EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_name = 'bling_tokens'
-    ) 
-    THEN 'bling_tokens table exists ✅'
-    ELSE 'bling_tokens table missing ❌'
-  END as tokens_status;
+-- Verificar tabela de tokens  
+SELECT 'bling_tokens table' as test_name,
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'bling_tokens')
+            THEN 'PASS' ELSE 'FAIL' END as result;
 
--- Verificar se a tabela de produtos existe
-SELECT 
-  CASE 
-    WHEN EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_name = 'products'
-    ) 
-    THEN 'products table exists ✅'
-    ELSE 'products table missing ❌'
-  END as products_status;
+-- Verificar tabela de produtos
+SELECT 'bling_products table' as test_name,
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'bling_products')
+            THEN 'PASS' ELSE 'FAIL' END as result;
 
--- Teste de inserção simples
-INSERT INTO users (email, name, created_at) 
-VALUES ('test@example.com', 'Test User', NOW())
-ON CONFLICT (email) DO NOTHING;
+-- Verificar tabela de webhooks
+SELECT 'bling_webhooks table' as test_name,
+       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'bling_webhooks')
+            THEN 'PASS' ELSE 'FAIL' END as result;
 
--- Verificar se o usuário foi inserido
-SELECT 
-  CASE 
-    WHEN EXISTS (
-      SELECT FROM users WHERE email = 'test@example.com'
-    )
-    THEN 'Test user created ✅'
-    ELSE 'Failed to create test user ❌'
-  END as user_creation_status;
+-- Testar inserção de token (exemplo)
+INSERT INTO bling_tokens (user_id, access_token, refresh_token, expires_at, created_at)
+VALUES ('test-user', 'test-access-token', 'test-refresh-token', NOW() + INTERVAL '1 hour', NOW())
+ON CONFLICT (user_id) DO UPDATE SET
+  access_token = EXCLUDED.access_token,
+  refresh_token = EXCLUDED.refresh_token,
+  expires_at = EXCLUDED.expires_at,
+  updated_at = NOW();
+
+-- Verificar se a inserção funcionou
+SELECT 'token insertion' as test_name,
+       CASE WHEN EXISTS (SELECT 1 FROM bling_tokens WHERE user_id = 'test-user')
+            THEN 'PASS' ELSE 'FAIL' END as result;
 
 -- Limpar dados de teste
-DELETE FROM users WHERE email = 'test@example.com';
+DELETE FROM bling_tokens WHERE user_id = 'test-user';
+
+-- Mostrar estatísticas das tabelas
+SELECT 'users count' as metric, COUNT(*) as value FROM users
+UNION ALL
+SELECT 'bling_products count' as metric, COUNT(*) as value FROM bling_products
+UNION ALL  
+SELECT 'bling_webhooks count' as metric, COUNT(*) as value FROM bling_webhooks;
+
+-- Verificar estrutura das tabelas
+\d bling_tokens;
+\d bling_products;
+\d bling_webhooks;
 
 SELECT 'Database integration test completed! 🎉' as final_status;

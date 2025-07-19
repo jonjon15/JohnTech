@@ -2,25 +2,49 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const clientId = process.env.BLING_CLIENT_ID
-    const clientSecret = process.env.BLING_CLIENT_SECRET
-    const webhookSecret = process.env.BLING_WEBHOOK_SECRET
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+    const requiredEnvVars = ["BLING_CLIENT_ID", "BLING_CLIENT_SECRET", "BLING_WEBHOOK_SECRET"]
 
-    const status = {
-      bling: {
-        configured: !!(clientId && clientSecret),
-        hasClientId: !!clientId,
-        hasClientSecret: !!clientSecret,
-        hasWebhookSecret: !!webhookSecret,
-        baseUrl: baseUrl,
-      },
-      timestamp: new Date().toISOString(),
+    const missingVars = requiredEnvVars.filter((varName) => !process.env[varName])
+
+    if (missingVars.length > 0) {
+      return NextResponse.json(
+        {
+          status: "error",
+          message: "Variáveis de ambiente faltando",
+          missing: missingVars,
+        },
+        { status: 500 },
+      )
     }
 
-    return NextResponse.json(status)
+    // Teste básico de conectividade com a API do Bling
+    const testUrl = "https://www.bling.com.br/Api/v3/oauth/authorize"
+
+    try {
+      const response = await fetch(testUrl, { method: "HEAD" })
+
+      return NextResponse.json({
+        status: "ok",
+        message: "Configuração Bling OK",
+        bling_api_accessible: response.ok,
+        timestamp: new Date().toISOString(),
+      })
+    } catch (error) {
+      return NextResponse.json({
+        status: "warning",
+        message: "Configuração OK, mas API Bling inacessível",
+        error: error instanceof Error ? error.message : "Erro desconhecido",
+        timestamp: new Date().toISOString(),
+      })
+    }
   } catch (error) {
-    console.error("Erro ao verificar status do Bling:", error)
-    return NextResponse.json({ error: "Falha ao verificar status" }, { status: 500 })
+    return NextResponse.json(
+      {
+        status: "error",
+        message: "Erro interno",
+        error: error instanceof Error ? error.message : "Erro desconhecido",
+      },
+      { status: 500 },
+    )
   }
 }
