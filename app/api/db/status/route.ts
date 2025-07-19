@@ -6,36 +6,47 @@ export async function GET() {
     // Testar conexão com o banco
     const result = await sql`SELECT NOW() as current_time`
 
-    // Verificar se a tabela existe
+    // Verificar se a tabela de tokens existe
     const tableCheck = await sql`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
-        WHERE table_name = 'bling_tokens'
-      ) as table_exists
+        WHERE table_schema = 'public' 
+        AND table_name = 'bling_tokens'
+      )
     `
 
-    // Contar tokens
+    const tableExists = tableCheck.rows[0].exists
+
+    if (!tableExists) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Tabela bling_tokens não existe. Execute o script de criação do banco.",
+          connected: true,
+          table_exists: false,
+        },
+        { status: 500 },
+      )
+    }
+
+    // Verificar tokens existentes
     const tokenCount = await sql`SELECT COUNT(*) as count FROM bling_tokens`
 
     return NextResponse.json({
-      status: "connected",
-      database: {
-        connected: true,
-        currentTime: result.rows[0].current_time,
-        tableExists: tableCheck.rows[0].table_exists,
-        tokenCount: Number.parseInt(tokenCount.rows[0].count),
-      },
-      timestamp: new Date().toISOString(),
+      success: true,
+      message: "Banco de dados funcionando corretamente",
+      connected: true,
+      table_exists: true,
+      token_count: Number.parseInt(tokenCount.rows[0].count),
+      current_time: result.rows[0].current_time,
     })
   } catch (error: any) {
     return NextResponse.json(
       {
-        status: "error",
-        database: {
-          connected: false,
-          error: error.message,
-        },
-        timestamp: new Date().toISOString(),
+        success: false,
+        message: "Erro ao conectar com o banco de dados",
+        connected: false,
+        error: error.message,
       },
       { status: 500 },
     )

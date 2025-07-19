@@ -3,7 +3,7 @@ import { getValidAccessToken } from "@/lib/bling-auth"
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const id = params.id
-  const userEmail = "admin@example.com"
+  const userEmail = "admin@johntech.com"
 
   try {
     let token = await getValidAccessToken(userEmail)
@@ -55,7 +55,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   const id = params.id
-  const userEmail = "admin@example.com"
+  const userEmail = "admin@johntech.com"
 
   try {
     let token = await getValidAccessToken(userEmail)
@@ -111,7 +111,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(request: Request, { params }: { params: { id: string } }) {
   const id = params.id
-  const userEmail = "admin@example.com"
+  const userEmail = "admin@johntech.com"
 
   try {
     let token = await getValidAccessToken(userEmail)

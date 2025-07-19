@@ -9,12 +9,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Código de autorização não fornecido" }, { status: 400 })
     }
 
-    // Verificar se as variáveis de ambiente estão configuradas
-    if (!process.env.BLING_CLIENT_ID || !process.env.BLING_CLIENT_SECRET) {
-      console.error("Variáveis de ambiente do Bling não configuradas")
-      return NextResponse.json({ error: "Configuração do Bling incompleta" }, { status: 500 })
-    }
-
     // Trocar código por token
     const tokenResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
@@ -25,25 +19,23 @@ export async function POST(request: NextRequest) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code: code,
-        client_id: process.env.BLING_CLIENT_ID,
-        client_secret: process.env.BLING_CLIENT_SECRET,
+        client_id: process.env.BLING_CLIENT_ID!,
+        client_secret: process.env.BLING_CLIENT_SECRET!,
+        redirect_uri: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`,
       }),
     })
 
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text()
-      console.error("Erro ao obter token do Bling:", tokenResponse.status, errorText)
-      return NextResponse.json(
-        { error: "Falha na autenticação com Bling", details: errorText },
-        { status: tokenResponse.status },
-      )
+      const errorData = await tokenResponse.json().catch(() => ({}))
+      console.error("Erro ao obter token:", tokenResponse.status, errorData)
+      return NextResponse.json({ error: "Falha ao obter token", details: errorData }, { status: tokenResponse.status })
     }
 
     const tokenData = await tokenResponse.json()
-    console.log("Token obtido com sucesso:", { expires_in: tokenData.expires_in })
+    console.log("Token obtido com sucesso:", { ...tokenData, access_token: "***", refresh_token: "***" })
 
-    // Salvar token no banco
-    const userEmail = "admin@example.com" // Em produção, pegar do usuário logado
+    // Salvar tokens no banco
+    const userEmail = "admin@johntech.com"
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
 
     await sql`
@@ -59,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Token salvo com sucesso",
+      message: "Token obtido e salvo com sucesso",
       expires_at: expiresAt,
     })
   } catch (error: any) {

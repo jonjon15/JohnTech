@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getValidAccessToken } from "@/lib/bling-auth"
 
-const userEmail = "admin@example.com" // ajuste para multi-usuário conforme necessidade
+const userEmail = "admin@johntech.com"
 
 async function fetchProdutos(accessToken: string) {
   const blingApiUrl = process.env.BLING_API_URL!
