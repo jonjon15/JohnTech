@@ -22,13 +22,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   try {
     const id = parseId(params.id)
-    let situacao: string | undefined
-    try {
-      const body = await req.json()
-      situacao = body?.situacao
-    } catch (jsonErr) {
-      return NextResponse.json(handleBlingApiError("JSON inválido", "INVALID_JSON"), { status: 400 })
-    }
+    const { situacao } = await req.json()
     if (!situacao || !["aprovado", "rejeitado"].includes(situacao)) {
       return NextResponse.json(handleBlingApiError("Situação inválida. Use 'aprovado' ou 'rejeitado'", "INVALID_STATUS"), { status: 400 })
     }
