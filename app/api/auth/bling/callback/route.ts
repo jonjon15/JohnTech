@@ -1,91 +1,219 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { exchangeCodeForTokens, saveTokens } from "@/lib/bling-auth"
-import { createTablesIfNotExists } from "@/lib/db"
+import { sql } from "@/lib/db"
 
-const userEmail = "admin@johntech.com"
+const BLING_CLIENT_ID = process.env.BLING_CLIENT_ID!
+const BLING_CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
+const BLING_TOKEN_URL = "https://www.bling.com.br/Api/v3/oauth/token"
 
 export async function GET(request: NextRequest) {
-  const startTime = Date.now()
-  const requestId = crypto.randomUUID()
+  const searchParams = request.nextUrl.searchParams
+  const code = searchParams.get("code")
+  const state = searchParams.get("state")
+  const error = searchParams.get("error")
+
+  // Redireciona para a página de callback com os parâmetros
+  const callbackUrl = new URL("/auth/callback", request.url)
+
+  if (error) {
+    callbackUrl.searchParams.set("error", error)
+  }
+
+  if (code) {
+    callbackUrl.searchParams.set("code", code)
+  }
+
+  if (state) {
+    callbackUrl.searchParams.set("state", state)
+  }
+
+  // Verifica se houve erro na autorização
+  if (error) {
+    console.error("Erro na autorização:", error)
+    return NextResponse.redirect(callbackUrl)
+  }
+
+  // Verifica se o código foi recebido
+  if (!code) {
+    console.error("Código de autorização não recebido")
+    return NextResponse.redirect(callbackUrl)
+  }
+
+  // Verifica o state (opcional, mas recomendado para segurança)
+  if (state) {
+    // Aqui você pode validar se o state corresponde ao que foi enviado
+    console.log("State recebido:", state)
+  }
 
   try {
-    console.log(`🔄 [${requestId}] OAuth Callback - INÍCIO`)
+    // Troca o código pelo token de acesso
+    const tokenResponse = await exchangeCodeForToken(code, request.url)
 
-    // Garantir que as tabelas existem
-    await createTablesIfNotExists()
-
-    const searchParams = request.nextUrl.searchParams
-    const code = searchParams.get("code")
-    const error = searchParams.get("error")
-    const state = searchParams.get("state")
-
-    console.log(`📋 [${requestId}] Parâmetros:`, { code: !!code, error, state })
-
-    // Verificar se houve erro na autorização
-    if (error) {
-      console.error(`❌ [${requestId}] Erro OAuth:`, error)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", error)
-      errorUrl.searchParams.set("message", "Erro na autorização OAuth")
-      return NextResponse.redirect(errorUrl)
+    if (!tokenResponse.success) {
+      callbackUrl.searchParams.set("error", "token_failed")
+      callbackUrl.searchParams.set("message", encodeURIComponent(tokenResponse.error))
+      return NextResponse.redirect(callbackUrl)
     }
 
-    // Verificar se o código foi fornecido
-    if (!code) {
-      console.error(`❌ [${requestId}] Código não fornecido`)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", "missing_code")
-      errorUrl.searchParams.set("message", "Código de autorização não fornecido")
-      return NextResponse.redirect(errorUrl)
+    // Salva os tokens no banco de dados
+    await saveTokensToDatabase(tokenResponse.data)
+
+    // Redireciona para o dashboard com sucesso
+    callbackUrl.searchParams.set("success", "true")
+    return NextResponse.redirect(callbackUrl)
+  } catch (error) {
+    console.error("Erro no callback:", error)
+    callbackUrl.searchParams.set("error", "callback_failed")
+    callbackUrl.searchParams.set(
+      "message",
+      encodeURIComponent(error instanceof Error ? error.message : "Erro desconhecido"),
+    )
+    return NextResponse.redirect(callbackUrl)
+  }
+}
+
+async function exchangeCodeForToken(code: string, requestUrl: string) {
+  try {
+    const baseUrl = new URL(requestUrl).origin
+    const redirectUri = `${baseUrl}/auth/callback`
+
+    const formData = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: code,
+      redirect_uri: redirectUri,
+    })
+
+    const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
+
+    const response = await fetch(BLING_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        Authorization: `Basic ${credentials}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Erro ao trocar código por token:", response.status, errorText)
+      return {
+        success: false,
+        error: `Falha na troca do token: ${response.status}`,
+      }
     }
 
-    // Construir redirect URI
-    const redirectUri = new URL("/api/auth/bling/callback", request.nextUrl.origin).toString()
-    console.log(`🔗 [${requestId}] Redirect URI:`, redirectUri)
+    const tokenData = await response.json()
 
-    // Trocar código por tokens
-    console.log(`🔄 [${requestId}] Trocando código por tokens...`)
-    const tokenData = await exchangeCodeForTokens(code, redirectUri)
+    return {
+      success: true,
+      data: {
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        expires_in: tokenData.expires_in,
+        token_type: tokenData.token_type,
+        scope: tokenData.scope,
+      },
+    }
+  } catch (error) {
+    console.error("Erro na requisição de token:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Erro desconhecido",
+    }
+  }
+}
 
-    if (!tokenData) {
-      console.error(`❌ [${requestId}] Falha na troca de tokens`)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", "token_exchange_failed")
-      errorUrl.searchParams.set("message", "Falha ao obter tokens do Bling")
-      return NextResponse.redirect(errorUrl)
+async function saveTokensToDatabase(tokenData: any) {
+  try {
+    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+
+    // Primeiro, tenta buscar informações do usuário usando o token
+    const userInfo = await getUserInfo(tokenData.access_token)
+
+    if (userInfo.success) {
+      // Salva ou atualiza o usuário no banco
+      await sql`
+        INSERT INTO users (
+          email, 
+          name, 
+          bling_access_token, 
+          bling_refresh_token, 
+          bling_token_expires_at,
+          bling_user_id,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${userInfo.data.email || "user@bling.com"}, 
+          ${userInfo.data.name || "Usuário Bling"}, 
+          ${tokenData.access_token}, 
+          ${tokenData.refresh_token}, 
+          ${expiresAt.toISOString()},
+          ${userInfo.data.id || null},
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (email) 
+        DO UPDATE SET 
+          bling_access_token = EXCLUDED.bling_access_token,
+          bling_refresh_token = EXCLUDED.bling_refresh_token,
+          bling_token_expires_at = EXCLUDED.bling_token_expires_at,
+          bling_user_id = EXCLUDED.bling_user_id,
+          updated_at = NOW()
+      `
+
+      console.log("Tokens salvos no banco com sucesso")
+    } else {
+      // Se não conseguir buscar info do usuário, salva apenas os tokens
+      await sql`
+        INSERT INTO users (
+          email, 
+          name, 
+          bling_access_token, 
+          bling_refresh_token, 
+          bling_token_expires_at,
+          created_at,
+          updated_at
+        ) VALUES (
+          'user@bling.com', 
+          'Usuário Bling', 
+          ${tokenData.access_token}, 
+          ${tokenData.refresh_token}, 
+          ${expiresAt.toISOString()},
+          NOW(),
+          NOW()
+        )
+        ON CONFLICT (email) 
+        DO UPDATE SET 
+          bling_access_token = EXCLUDED.bling_access_token,
+          bling_refresh_token = EXCLUDED.bling_refresh_token,
+          bling_token_expires_at = EXCLUDED.bling_token_expires_at,
+          updated_at = NOW()
+      `
+    }
+  } catch (error) {
+    console.error("Erro ao salvar tokens no banco:", error)
+    throw error
+  }
+}
+
+async function getUserInfo(accessToken: string) {
+  try {
+    const response = await fetch("https://www.bling.com.br/Api/v3/usuarios", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    })
+
+    if (!response.ok) {
+      return { success: false, error: "Falha ao buscar informações do usuário" }
     }
 
-    // Salvar tokens no banco
-    console.log(`💾 [${requestId}] Salvando tokens...`)
-    const saved = await saveTokens(userEmail, tokenData)
-
-    if (!saved) {
-      console.error(`❌ [${requestId}] Falha ao salvar tokens`)
-      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-      errorUrl.searchParams.set("error", "save_failed")
-      errorUrl.searchParams.set("message", "Falha ao salvar tokens no banco")
-      return NextResponse.redirect(errorUrl)
-    }
-
-    const elapsedTime = Date.now() - startTime
-    console.log(`✅ [${requestId}] OAuth concluído em ${elapsedTime}ms`)
-
-    // Redirecionar para página de sucesso
-    const successUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-    successUrl.searchParams.set("success", "true")
-    successUrl.searchParams.set("message", "Autenticação realizada com sucesso")
-    successUrl.searchParams.set("elapsed_time", elapsedTime.toString())
-
-    return NextResponse.redirect(successUrl)
-  } catch (error: any) {
-    const elapsedTime = Date.now() - startTime
-    console.error(`❌ [${requestId}] Erro no callback OAuth:`, error)
-
-    const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
-    errorUrl.searchParams.set("error", "internal_error")
-    errorUrl.searchParams.set("message", error.message || "Erro interno no callback")
-    errorUrl.searchParams.set("elapsed_time", elapsedTime.toString())
-
-    return NextResponse.redirect(errorUrl)
+    const userData = await response.json()
+    return { success: true, data: userData.data || userData }
+  } catch (error) {
+    console.error("Erro ao buscar informações do usuário:", error)
+    return { success: false, error: "Erro na requisição" }
   }
 }

@@ -30,11 +30,16 @@ export class BlingApiError extends Error {
   }
 }
 
-export function handleBlingApiError(error: any, context = "API_CALL"): BlingApiResponse {
+/**
+ * Converts any error into a predictable JSON shape.
+ */
+export function handleBlingApiError(error: unknown, context = "API_CALL", code = "INTERNAL_ERROR"): BlingApiResponse {
   console.error(`❌ Erro no contexto ${context}:`, error)
 
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Erro inesperado"
+
   // Timeout errors
-  if (error.name === "AbortError") {
+  if (error instanceof Error && error.name === "AbortError") {
     return {
       success: false,
       error: {
@@ -47,7 +52,7 @@ export function handleBlingApiError(error: any, context = "API_CALL"): BlingApiR
   }
 
   // Network errors
-  if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
+  if (error instanceof Error && (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED")) {
     return {
       success: false,
       error: {
@@ -73,47 +78,47 @@ export function handleBlingApiError(error: any, context = "API_CALL"): BlingApiR
   }
 
   // HTTP errors with response
-  if (error.response) {
+  if (error instanceof Error && error.response) {
     const status = error.response.status
-    let code = "HTTP_ERROR"
-    let message = `Erro HTTP ${status}`
+    let errorCode = "HTTP_ERROR"
+    let errorMessage = `Erro HTTP ${status}`
 
     switch (status) {
       case 400:
-        code = "BAD_REQUEST"
-        message = "Requisição inválida"
+        errorCode = "BAD_REQUEST"
+        errorMessage = "Requisição inválida"
         break
       case 401:
-        code = "UNAUTHORIZED"
-        message = "Token de acesso inválido ou expirado"
+        errorCode = "UNAUTHORIZED"
+        errorMessage = "Token de acesso inválido ou expirado"
         break
       case 403:
-        code = "FORBIDDEN"
-        message = "Acesso negado"
+        errorCode = "FORBIDDEN"
+        errorMessage = "Acesso negado"
         break
       case 404:
-        code = "NOT_FOUND"
-        message = "Recurso não encontrado"
+        errorCode = "NOT_FOUND"
+        errorMessage = "Recurso não encontrado"
         break
       case 422:
-        code = "VALIDATION_ERROR"
-        message = "Dados de entrada inválidos"
+        errorCode = "VALIDATION_ERROR"
+        errorMessage = "Dados de entrada inválidos"
         break
       case 429:
-        code = "RATE_LIMIT"
-        message = "Limite de requisições excedido"
+        errorCode = "RATE_LIMIT"
+        errorMessage = "Limite de requisições excedido"
         break
       case 500:
-        code = "SERVER_ERROR"
-        message = "Erro interno do servidor Bling"
+        errorCode = "SERVER_ERROR"
+        errorMessage = "Erro interno do servidor Bling"
         break
     }
 
     return {
       success: false,
       error: {
-        code,
-        message,
+        code: errorCode,
+        message: errorMessage,
         status,
         details: {
           context,
@@ -128,65 +133,37 @@ export function handleBlingApiError(error: any, context = "API_CALL"): BlingApiR
   return {
     success: false,
     error: {
-      code: "INTERNAL_ERROR",
-      message: error.message || "Erro interno não identificado",
-      status: 500,
+      code,
+      message,
       details: {
         context,
-        error_type: error.constructor.name,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+        error_type: error.constructor ? error.constructor.name : undefined,
+        stack: process.env.NODE_ENV === "development" ? (error as Error).stack : undefined,
       },
     },
   }
 }
 
-export function createBlingApiResponse<T>(data: T, elapsedTime: number, requestId?: string): BlingApiResponse<T> {
+/**
+ * Small helper to create a standard API response body.
+ */
+export function createBlingApiResponse<T>(payload: T, elapsedMs: number, requestId: string): BlingApiResponse<T> {
   return {
     success: true,
-    data,
+    data: payload,
     meta: {
-      elapsed_time: elapsedTime,
+      elapsed_time: elapsedMs,
       timestamp: new Date().toISOString(),
       request_id: requestId,
     },
   }
 }
 
-export function validateBlingResponse(response: any, expectedFields: string[] = []): boolean {
-  if (!response) {
-    throw new BlingApiError("Resposta vazia da API Bling", "EMPTY_RESPONSE", 502)
-  }
-
-  // Verificar se é um erro do Bling
-  if (response.error) {
-    throw new BlingApiError(
-      response.error.message || "Erro retornado pela API Bling",
-      response.error.code || "BLING_API_ERROR",
-      response.error.status || 400,
-      response.error,
-    )
-  }
-
-  // Verificar campos obrigatórios
-  for (const field of expectedFields) {
-    if (!(field in response)) {
-      throw new BlingApiError(`Campo obrigatório '${field}' não encontrado na resposta`, "MISSING_FIELD", 502, {
-        missing_field: field,
-        response,
-      })
-    }
-  }
-
-  return true
+/**
+ * Simple console logger for observability.
+ */
+export function logBlingApiCall(method: string, path: string, requestId: string, elapsedMs: number, success: boolean) {
+  const emoji = success ? "✅" : "❌"
+  // eslint-disable-next-line no-console
+  console.log(`${emoji} [${requestId}] ${method} ${path} - ${elapsedMs} ms`)
 }
-
-export function logBlingApiCall(method: string, url: string, status: number, elapsedTime: number, requestId?: string) {
-  const logLevel = status >= 400 ? "error" : status >= 300 ? "warn" : "info"
-  const emoji = status >= 400 ? "❌" : status >= 300 ? "⚠️" : "✅"
-
-  console.log(`${emoji} Bling API ${method} ${url} - ${status} (${elapsedTime}ms)${requestId ? ` [${requestId}]` : ""}`)
-}
-
-// Aliases para compatibilidade
-export { handleBlingApiError as handleBlingError }
-export { logBlingApiCall as logRequest }

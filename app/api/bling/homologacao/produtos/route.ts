@@ -1,145 +1,65 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getProducts, createProduct } from "@/lib/db"
-import { handleBlingApiError, createBlingApiResponse } from "@/lib/bling-error-handler"
-import { randomUUID } from "crypto"
+export const runtime = "nodejs"
 
-export async function GET(request: NextRequest) {
-  const requestId = randomUUID()
-  const startTime = Date.now()
+import { type NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
+import { listProducts, createProduct, type BlingProduct } from "@/lib/db"
+import { handleBlingApiError, createBlingApiResponse, logBlingApiCall } from "@/lib/bling-error-handler"
+
+export async function GET(req: NextRequest) {
+  const t0 = Date.now()
+  const requestId = crypto.randomUUID()
 
   try {
-    console.log(`🔍 [${requestId}] GET /api/bling/homologacao/produtos - Listando produtos...`)
+    const data = await listProducts()
+    const elapsed = Date.now() - t0
+    logBlingApiCall("GET", "/api/bling/homologacao/produtos", requestId, elapsed, true)
 
-    const products = await getProducts()
-    const elapsedTime = Date.now() - startTime
-
-    console.log(`✅ [${requestId}] ${products.length} produtos encontrados (${elapsedTime}ms)`)
-
-    return NextResponse.json(
-      createBlingApiResponse(
-        {
-          produtos: products.map((product) => ({
-            id: product.id,
-            nome: product.nome,
-            descricao: product.descricao || "",
-            preco: typeof product.preco === "number" ? product.preco.toFixed(2) : "0.00",
-            estoque: product.estoque,
-            bling_id: product.bling_id,
-            created_at: product.created_at,
-            updated_at: product.updated_at,
-          })),
-          total: products.length,
-        },
-        elapsedTime,
-        requestId,
-      ),
-    )
-  } catch (error) {
-    const errorResponse = handleBlingApiError(error, `GET_PRODUCTS_${requestId}`)
-    return NextResponse.json(errorResponse, { status: errorResponse.error?.status || 500 })
+    return NextResponse.json(createBlingApiResponse({ data }, elapsed, requestId))
+  } catch (err) {
+    const elapsed = Date.now() - t0
+    logBlingApiCall("GET", "/api/bling/homologacao/produtos", requestId, elapsed, false)
+    return NextResponse.json(handleBlingApiError(err, "LIST_PRODUCTS"), { status: 500 })
   }
 }
 
-export async function POST(request: NextRequest) {
-  const requestId = randomUUID()
-  const startTime = Date.now()
+export async function POST(req: NextRequest) {
+  const t0 = Date.now()
+  const requestId = crypto.randomUUID()
 
   try {
-    console.log(`📝 [${requestId}] POST /api/bling/homologacao/produtos - Criando produto...`)
-
-    const body = await request.json()
-    const { nome, descricao, preco, estoque } = body
-
-    // Validação básica
-    if (!nome || typeof nome !== "string") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Nome é obrigatório e deve ser uma string",
-            status: 400,
-          },
-        },
-        { status: 400 },
-      )
+    const body = await req.json()
+    // Basic validation
+    if (!body?.nome || !body?.codigo) {
+      return NextResponse.json(handleBlingApiError("Campos obrigatórios ausentes", "BAD_REQUEST"), { status: 400 })
     }
 
-    if (preco !== undefined && (typeof preco !== "number" || preco < 0)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Preço deve ser um número positivo",
-            status: 400,
-          },
-        },
-        { status: 400 },
-      )
+    const novoProduto = await createProduct({
+      nome: body.nome,
+      codigo: body.codigo,
+      preco: Number(body.preco ?? 0),
+      descricao_curta: body.descricao_curta ?? null,
+      situacao: body.situacao ?? "Ativo",
+      tipo: body.tipo ?? "P",
+      formato: body.formato ?? "S",
+      bling_id: body.bling_id ?? null,
+      created_at: "", // ignored by insert
+      updated_at: "",
+      id: 0,
+    } as unknown as Omit<BlingProduct, "id" | "created_at" | "updated_at">)
+
+    const elapsed = Date.now() - t0
+    logBlingApiCall("POST", "/api/bling/homologacao/produtos", requestId, elapsed, true)
+
+    return NextResponse.json(createBlingApiResponse({ data: novoProduto }, elapsed, requestId), { status: 201 })
+  } catch (err: any) {
+    const elapsed = Date.now() - t0
+    logBlingApiCall("POST", "/api/bling/homologacao/produtos", requestId, elapsed, false)
+
+    // Unique constraint
+    if (err.code === "23505") {
+      return NextResponse.json(handleBlingApiError("Código já existe", "DUPLICATE_CODE"), { status: 409 })
     }
 
-    if (estoque !== undefined && (typeof estoque !== "number" || estoque < 0)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Estoque deve ser um número positivo",
-            status: 400,
-          },
-        },
-        { status: 400 },
-      )
-    }
-
-    const newProduct = await createProduct({
-      nome: nome.trim(),
-      descricao: descricao?.trim() || "",
-      preco: preco || 0,
-      estoque: estoque || 0,
-      bling_id: null,
-    })
-
-    if (!newProduct) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "CREATE_ERROR",
-            message: "Erro ao criar produto no banco de dados",
-            status: 500,
-          },
-        },
-        { status: 500 },
-      )
-    }
-
-    const elapsedTime = Date.now() - startTime
-
-    console.log(`✅ [${requestId}] Produto criado: ${newProduct.id} - ${newProduct.nome} (${elapsedTime}ms)`)
-
-    return NextResponse.json(
-      createBlingApiResponse(
-        {
-          produto: {
-            id: newProduct.id,
-            nome: newProduct.nome,
-            descricao: newProduct.descricao || "",
-            preco: typeof newProduct.preco === "number" ? newProduct.preco.toFixed(2) : "0.00",
-            estoque: newProduct.estoque,
-            bling_id: newProduct.bling_id,
-            created_at: newProduct.created_at,
-            updated_at: newProduct.updated_at,
-          },
-        },
-        elapsedTime,
-        requestId,
-      ),
-      { status: 201 },
-    )
-  } catch (error) {
-    const errorResponse = handleBlingApiError(error, `CREATE_PRODUCT_${requestId}`)
-    return NextResponse.json(errorResponse, { status: errorResponse.error?.status || 500 })
+    return NextResponse.json(handleBlingApiError(err, "CREATE_PRODUCT"), { status: 500 })
   }
 }

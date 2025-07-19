@@ -1,40 +1,42 @@
 import { NextResponse } from "next/server"
-import { getBlingTokens } from "@/lib/db"
-
-const userEmail = "admin@johntech.com"
+import { sql } from "@vercel/postgres"
 
 export async function GET() {
   try {
-    console.log("🔍 Verificando status da autenticação Bling...")
-
-    const token = await getBlingTokens(userEmail)
-
-    if (!token) {
-      return NextResponse.json({
-        authenticated: false,
-        message: "Nenhuma autenticação encontrada",
-      })
-    }
-
-    const expiresAt = new Date(token.expires_at)
-    const now = new Date()
-    const isExpired = now >= expiresAt
+    // Verificar se há tokens salvos
+    const tokenCheck = await sql`
+      SELECT 
+        email,
+        bling_access_token IS NOT NULL as has_access_token,
+        bling_refresh_token IS NOT NULL as has_refresh_token,
+        bling_token_expires_at,
+        bling_token_expires_at > NOW() as token_valid
+      FROM users 
+      WHERE bling_access_token IS NOT NULL
+      ORDER BY updated_at DESC
+      LIMIT 5
+    `
 
     return NextResponse.json({
-      authenticated: !isExpired,
-      user_email: token.user_email,
-      expires_at: token.expires_at,
-      created_at: token.created_at,
-      is_expired: isExpired,
-      expires_in_minutes: Math.round((expiresAt.getTime() - now.getTime()) / (1000 * 60)),
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      oauth: {
+        client_id: process.env.BLING_CLIENT_ID ? "configured" : "missing",
+        client_secret: process.env.BLING_CLIENT_SECRET ? "configured" : "missing",
+        redirect_uri: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`,
+      },
+      tokens: {
+        total_users_with_tokens: tokenCheck.rowCount,
+        users: tokenCheck.rows,
+      },
     })
-  } catch (error: any) {
-    console.error("❌ Erro ao verificar status:", error)
-
+  } catch (error) {
+    console.error("OAuth status check error:", error)
     return NextResponse.json(
       {
-        authenticated: false,
-        error: error.message || "Erro interno ao verificar status",
+        status: "error",
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
