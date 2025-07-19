@@ -93,3 +93,7 @@ export function handleBlingApiError(error: any, requestId: string): NextResponse
 
   return createBlingApiResponse(false, null, blingError, requestId)
 }
+
+// Alias necessários para compatibilidade com outros módulos
+export { handleBlingApiError as handleBlingError }
+export { logBlingApiCall as logRequest }

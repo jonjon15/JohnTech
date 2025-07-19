@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const redirectUri = `${baseUrl}/api/bling/oauth/callback`
 
     // URL de autorização conforme documentação oficial
-    const authUrl = new URL("https://www.bling.com.br/Api/v3/oauth/authorize")
+    const authUrl = new URL("https://www.bling.com.br/Api/v3/oauth/authorize") // <-- AQUI ESTÁ O ENDPOINT CORRETO
     authUrl.searchParams.set("response_type", "code")
     authUrl.searchParams.set("client_id", clientId)
     authUrl.searchParams.set("redirect_uri", redirectUri)

@@ -121,7 +121,7 @@ export async function createProduct(product: Omit<Product, "id" | "created_at" |
         peso_bruto, peso_liquido, gtin, gtinEmbalagem, tipoProducao,
         condicao, freteGratis, marca, descricaoComplementar, linkExterno,
         observacoes, descricaoEmbalagemDiscreta, quantidade_minima, descricao_curta, situacao, tipo, formato
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
       RETURNING *
     `,
       [
@@ -434,3 +434,9 @@ function normalizeProduct(row: any): Product {
 }
 
 export default pool // Garante a exportação padrão do pool
+
+// Aliases exigidos pelo deploy (Vercel build)
+export { logWebhook as createWebhookLog }
+export { testConnection as checkDatabaseConnection }
+export { initializeTables as createTablesIfNotExists }
+export { getTokens as getBlingTokens }
