@@ -1,346 +1,265 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Separator } from "@/components/ui/separator"
-import { CheckCircle, XCircle, AlertCircle, ExternalLink, RefreshCw, Settings } from "lucide-react"
-
-interface AuthStatus {
-  authenticated: boolean
-  expiresAt?: string
-  userInfo?: {
-    id: number
-    nome: string
-    email: string
-  }
-}
-
-interface IntegrationStatus {
-  authentication: AuthStatus
-  api: {
-    connected: boolean
-    rateLimit: {
-      limit: number
-      remaining: number
-      resetAt: string
-    }
-  }
-  webhooks: {
-    total: number
-    processados: number
-    pendentes: number
-    erros: number
-    ultimoEvento?: string
-  }
-  overall: {
-    status: "healthy" | "error"
-    message: string
-  }
-}
+import { Copy, ExternalLink, Settings, CheckCircle, AlertTriangle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import Link from "next/link"
+import { useTheme } from "@/contexts/theme-context" // Corrigido
+import BlingIntegrationTest from "@/components/bling-integration-test"
 
 export default function ConfiguracaoBlingPage() {
-  const [status, setStatus] = useState<IntegrationStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const { toast } = useToast()
+  const { theme } = useTheme()
+  const isWakanda = theme === "wakanda"
 
-  // Verifica parâmetros da URL
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const errorParam = urlParams.get("error")
-    const successParam = urlParams.get("success")
+  const currentDomain = typeof window !== "undefined" ? window.location.origin : "https://seu-dominio.com"
+  const redirectUri = `${currentDomain}/auth/callback`
+  const webhookUrl = `${currentDomain}/api/bling/webhooks`
 
-    if (errorParam) {
-      setError(decodeURIComponent(errorParam))
-    }
-    if (successParam) {
-      setSuccess("Autenticação realizada com sucesso!")
-    }
-
-    // Remove parâmetros da URL
-    if (errorParam || successParam) {
-      window.history.replaceState({}, "", window.location.pathname)
-    }
-  }, [])
-
-  // Carrega status da integração
-  const loadStatus = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch("/api/bling/status")
-      const data = await response.json()
-      setStatus(data)
-    } catch (err) {
-      console.error("Erro ao carregar status:", err)
-      setError("Erro ao carregar status da integração")
-    } finally {
-      setLoading(false)
-    }
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    toast({
+      title: "Copiado!",
+      description: `${label} copiado para a área de transferência`,
+    })
+    setTimeout(() => setCopied(false), 2000)
   }
 
-  useEffect(() => {
-    loadStatus()
-  }, [])
-
-  // Inicia processo de autenticação
-  const handleAuthenticate = async () => {
-    try {
-      const response = await fetch("/api/auth/bling")
-      const data = await response.json()
-
-      if (data.authUrl) {
-        window.location.href = data.authUrl
-      } else {
-        setError("Erro ao gerar URL de autenticação")
-      }
-    } catch (err) {
-      console.error("Erro ao autenticar:", err)
-      setError("Erro ao iniciar autenticação")
-    }
-  }
-
-  // Revoga autenticação
-  const handleRevoke = async () => {
-    if (!confirm("Tem certeza que deseja revogar a autenticação?")) {
-      return
-    }
-
-    try {
-      const response = await fetch("/api/auth/bling/reset", { method: "POST" })
-      const data = await response.json()
-
-      if (data.success) {
-        setSuccess("Autenticação revogada com sucesso")
-        loadStatus()
-      } else {
-        setError(data.error || "Erro ao revogar autenticação")
-      }
-    } catch (err) {
-      console.error("Erro ao revogar:", err)
-      setError("Erro ao revogar autenticação")
-    }
-  }
-
-  // Testa conexão
-  const handleTestConnection = async () => {
-    try {
-      setLoading(true)
-      await loadStatus()
-      setSuccess("Conexão testada com sucesso")
-    } catch (err) {
-      setError("Erro ao testar conexão")
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "healthy":
-        return <CheckCircle className="h-5 w-5 text-green-500" />
-      case "error":
-        return <XCircle className="h-5 w-5 text-red-500" />
-      default:
-        return <AlertCircle className="h-5 w-5 text-yellow-500" />
-    }
-  }
-
-  const getStatusBadge = (connected: boolean) => {
-    return <Badge variant={connected ? "default" : "destructive"}>{connected ? "Conectado" : "Desconectado"}</Badge>
-  }
+  const configSteps = [
+    {
+      step: 1,
+      title: "Acesse o Painel do Bling",
+      description: "Entre no seu painel administrativo do Bling",
+      action: (
+        <Button
+          asChild
+          variant="outline"
+          className={`border-white/20 text-white hover:bg-white/10 bg-transparent ${isWakanda ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : ""}`}
+        >
+          <Link href="https://www.bling.com.br" target="_blank">
+            <ExternalLink className="h-4 w-4 mr-2" />
+            Abrir Bling
+          </Link>
+        </Button>
+      ),
+    },
+    {
+      step: 2,
+      title: "Vá para Configurações > Aplicações",
+      description: "Navegue até a seção de aplicações e integrações",
+      action: null,
+    },
+    {
+      step: 3,
+      title: "Encontre sua Aplicação",
+      description: "Localize a aplicação com Client ID: 44866dbd8fe131077d73dbe3d60531016512c855",
+      action: null,
+    },
+    {
+      step: 4,
+      title: "Configure a URL de Redirecionamento",
+      description: "Adicione a URL de callback na configuração da aplicação",
+      action: (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Input
+              value={redirectUri}
+              readOnly
+              className={`bg-white/10 border-white/20 text-white font-mono text-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 text-green-100" : ""}`}
+            />
+            <Button
+              onClick={() => copyToClipboard(redirectUri, "URL de redirecionamento")}
+              size="sm"
+              variant="outline"
+              className={`border-white/20 text-white hover:bg-white/10 bg-transparent ${isWakanda ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : ""}`}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className={`text-xs ${isWakanda ? "text-green-100/60" : "text-white/60"}`}>
+            Cole esta URL exata no campo "URL de Redirecionamento" no Bling
+          </p>
+        </div>
+      ),
+    },
+    {
+      step: 5,
+      title: "Configure a URL do Webhook (Opcional)",
+      description: "Para receber notificações em tempo real",
+      action: (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Input
+              value={webhookUrl}
+              readOnly
+              className={`bg-white/10 border-white/20 text-white font-mono text-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 text-green-100" : ""}`}
+            />
+            <Button
+              onClick={() => copyToClipboard(webhookUrl, "URL do webhook")}
+              size="sm"
+              variant="outline"
+              className={`border-white/20 text-white hover:bg-white/10 bg-transparent ${isWakanda ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : ""}`}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className={`text-xs ${isWakanda ? "text-green-100/60" : "text-white/60"}`}>
+            Configure esta URL para receber webhooks do Bling
+          </p>
+        </div>
+      ),
+    },
+  ]
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Configuração Bling</h1>
-          <p className="text-muted-foreground">Configure a integração com a API do Bling</p>
+    <div
+      className={`min-h-screen pt-20 ${isWakanda ? "wakanda-bg wakanda-pattern" : "bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900"}`}
+    >
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        <Alert
+          className={`mb-8 ${isWakanda ? "bg-green-600/10 border-green-500/30" : "bg-yellow-600/10 border-yellow-500/30"}`}
+        >
+          <AlertTriangle className={`h-4 w-4 ${isWakanda ? "text-green-400" : "text-yellow-400"}`} />
+          <AlertDescription className={`${isWakanda ? "text-green-200" : "text-yellow-200"}`}>
+            <strong>Importante:</strong> Você precisa configurar a URL de redirecionamento no painel do Bling antes de
+            tentar fazer login. Siga os passos abaixo.
+          </AlertDescription>
+        </Alert>
+
+        <div className="space-y-6">
+          {configSteps.map((step) => (
+            <Card
+              key={step.step}
+              className={`backdrop-blur-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 wakanda-border" : "bg-white/5 border-white/10"}`}
+            >
+              <CardHeader>
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                    {step.step}
+                  </div>
+                  <div>
+                    <CardTitle className={`${isWakanda ? "text-green-100" : "text-white"}`}>{step.title}</CardTitle>
+                    <CardDescription className={`${isWakanda ? "text-green-100/70" : "text-white/70"}`}>
+                      {step.description}
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              {step.action && <CardContent>{step.action}</CardContent>}
+            </Card>
+          ))}
         </div>
-        <Button onClick={loadStatus} disabled={loading} variant="outline">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
-      </div>
 
-      {/* Alertas */}
-      {error && (
-        <Alert variant="destructive">
-          <XCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert>
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Status Geral */}
-      {status && (
-        <Card>
+        <Card
+          className={`backdrop-blur-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 wakanda-border mt-8" : "bg-white/5 border-white/10 mt-8"}`}
+        >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {getStatusIcon(status.overall.status)}
-              Status da Integração
+            <CardTitle className={`${isWakanda ? "text-green-100" : "text-white"} flex items-center`}>
+              <Settings className="h-5 w-5 mr-2" />
+              Informações da Aplicação
             </CardTitle>
-            <CardDescription>{status.overall.message}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Autenticação */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Autenticação OAuth 2.0
-              {status && getStatusBadge(status.authentication.authenticated)}
-            </CardTitle>
-            <CardDescription>Conecte sua conta do Bling para acessar a API</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {status?.authentication.authenticated ? (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium">Usuário:</p>
-                  <p className="text-sm text-muted-foreground">
-                    {status.authentication.userInfo?.nome || "Não disponível"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Email:</p>
-                  <p className="text-sm text-muted-foreground">
-                    {status.authentication.userInfo?.email || "Não disponível"}
-                  </p>
-                </div>
-                {status.authentication.expiresAt && (
-                  <div>
-                    <p className="text-sm font-medium">Expira em:</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(status.authentication.expiresAt).toLocaleString("pt-BR")}
-                    </p>
-                  </div>
-                )}
-                <Separator />
-                <div className="flex gap-2">
-                  <Button onClick={handleTestConnection} variant="outline" size="sm">
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Testar Conexão
-                  </Button>
-                  <Button onClick={handleRevoke} variant="destructive" size="sm">
-                    Revogar Acesso
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Para usar a integração, você precisa autorizar o acesso à sua conta do Bling.
-                </p>
-                <Button onClick={handleAuthenticate} className="w-full">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Conectar com Bling
+            <div>
+              <Label className="text-white/70">Client ID</Label>
+              <div className="flex items-center space-x-2 mt-1">
+                <Input
+                  value="44866dbd8fe131077d73dbe3d60531016512c855"
+                  readOnly
+                  className={`bg-white/10 border-white/20 text-white font-mono text-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 text-green-100" : ""}`}
+                />
+                <Button
+                  onClick={() => copyToClipboard("44866dbd8fe131077d73dbe3d60531016512c855", "Client ID")}
+                  size="sm"
+                  variant="outline"
+                  className={`border-white/20 text-white hover:bg-white/10 bg-transparent ${isWakanda ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : ""}`}
+                >
+                  <Copy className="h-4 w-4" />
                 </Button>
               </div>
-            )}
+            </div>
+
+            <div>
+              <Label className="text-white/70">Client Secret</Label>
+              <div className="flex items-center space-x-2 mt-1">
+                <Input
+                  value="18176f2b734f4abced1893fe39a852b6f28ff53c2a564348ebfe960367d1"
+                  readOnly
+                  type="password"
+                  className={`bg-white/10 border-white/20 text-white font-mono text-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 text-green-100" : ""}`}
+                />
+                <Button
+                  onClick={() =>
+                    copyToClipboard("18176f2b734f4abced1893fe39a852b6f28ff53c2a564348ebfe960367d1", "Client Secret")
+                  }
+                  size="sm"
+                  variant="outline"
+                  className={`border-white/20 text-white hover:bg-white/10 bg-transparent ${isWakanda ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : ""}`}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-white/70">Domínio Atual</Label>
+              <div className="flex items-center space-x-2 mt-1">
+                <Input
+                  value={currentDomain}
+                  readOnly
+                  className={`bg-white/10 border-white/20 text-white font-mono text-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 text-green-100" : ""}`}
+                />
+                <Badge
+                  className={`${isWakanda ? "bg-green-600/20 text-green-300 border-green-500/30" : "bg-green-600/20 text-green-300 border-green-500/30"}`}
+                >
+                  <CheckCircle className={`h-3 w-3 mr-1 ${isWakanda ? "text-green-300" : "text-green-300"}`} />
+                  Detectado
+                </Badge>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        {/* API Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Status da API
-              {status && getStatusBadge(status.api.connected)}
-            </CardTitle>
-            <CardDescription>Informações sobre a conectividade com a API</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {status?.api && (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium">Rate Limit:</p>
-                  <p className="text-sm text-muted-foreground">
-                    {status.api.rateLimit.remaining} / {status.api.rateLimit.limit} requisições restantes
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Reset em:</p>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(status.api.rateLimit.resetAt).toLocaleString("pt-BR")}
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <BlingIntegrationTest />
 
-        {/* Webhooks */}
-        <Card>
+        <Card
+          className={`mt-8 ${isWakanda ? "bg-green-600/10 border-green-500/30" : "bg-blue-600/10 border-blue-500/30"}`}
+        >
           <CardHeader>
-            <CardTitle>Webhooks</CardTitle>
-            <CardDescription>Estatísticas de eventos recebidos do Bling</CardDescription>
+            <CardTitle className={`${isWakanda ? "text-green-300" : "text-blue-300"}`}>Próximos Passos</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {status?.webhooks && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-2xl font-bold">{status.webhooks.total}</p>
-                  <p className="text-sm text-muted-foreground">Total</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-green-600">{status.webhooks.processados}</p>
-                  <p className="text-sm text-muted-foreground">Processados</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-yellow-600">{status.webhooks.pendentes}</p>
-                  <p className="text-sm text-muted-foreground">Pendentes</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-red-600">{status.webhooks.erros}</p>
-                  <p className="text-sm text-muted-foreground">Erros</p>
-                </div>
-              </div>
-            )}
-            {status?.webhooks.ultimoEvento && (
-              <div>
-                <p className="text-sm font-medium">Último evento:</p>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(status.webhooks.ultimoEvento).toLocaleString("pt-BR")}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Links Úteis */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Links Úteis</CardTitle>
-            <CardDescription>Documentação e recursos do Bling</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
-              <a href="https://developer.bling.com.br" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Documentação da API
-              </a>
-            </Button>
-            <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
-              <a href="https://www.bling.com.br/aplicativos" target="_blank" rel="noopener noreferrer">
-                <Settings className="h-4 w-4 mr-2" />
-                Gerenciar Aplicativos
-              </a>
-            </Button>
-            <Button variant="outline" className="w-full justify-start bg-transparent" asChild>
-              <a href="/api/bling/status" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Status JSON
-              </a>
-            </Button>
+          <CardContent>
+            <ol className={`${isWakanda ? "text-green-200" : "text-blue-200"} space-y-2`}>
+              <li>1. Configure a URL de redirecionamento no Bling conforme instruções acima</li>
+              <li>2. Salve as configurações no painel do Bling</li>
+              <li>3. Aguarde alguns minutos para as alterações serem aplicadas</li>
+              <li>4. Teste a conexão usando o botão "Conectar com Bling"</li>
+            </ol>
+            <div className="mt-6 flex space-x-4">
+              <Link href="/auth">
+                <Button
+                  className={`${isWakanda ? "bg-green-600 hover:bg-green-700 text-black font-semibold wakanda-glow" : "bg-purple-600 hover:bg-purple-700"}`}
+                >
+                  Testar Conexão
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button
+                  variant="outline"
+                  className={`border-white/20 text-white hover:bg-white/10 bg-transparent ${isWakanda ? "border-green-500/30 text-green-400 hover:bg-green-500/10" : ""}`}
+                >
+                  Ir para Dashboard
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>

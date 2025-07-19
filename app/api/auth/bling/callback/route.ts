@@ -1,70 +1,91 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { BlingAuth } from "@/lib/bling-auth"
-import { BlingErrorHandler } from "@/lib/bling-error-handler"
+import { exchangeCodeForTokens, saveTokens } from "@/lib/bling-auth"
+import { createTablesIfNotExists } from "@/lib/db"
 
-/**
- * Callback OAuth 2.0 do Bling
- * https://developer.bling.com.br/aplicativos#obtenção-do-authorization-code
- */
+const userEmail = "admin@johntech.com"
+
 export async function GET(request: NextRequest) {
+  const startTime = Date.now()
+  const requestId = crypto.randomUUID()
+
   try {
-    const { searchParams } = new URL(request.url)
+    console.log(`🔄 [${requestId}] OAuth Callback - INÍCIO`)
+
+    // Garantir que as tabelas existem
+    await createTablesIfNotExists()
+
+    const searchParams = request.nextUrl.searchParams
     const code = searchParams.get("code")
-    const state = searchParams.get("state")
     const error = searchParams.get("error")
-    const errorDescription = searchParams.get("error_description")
+    const state = searchParams.get("state")
 
-    console.log("📥 Callback OAuth recebido:", { code: !!code, state, error })
+    console.log(`📋 [${requestId}] Parâmetros:`, { code: !!code, error, state })
 
-    // Verifica se houve erro na autorização
+    // Verificar se houve erro na autorização
     if (error) {
-      console.error("❌ Erro na autorização:", error, errorDescription)
-
-      const errorMessage = this.getAuthorizationErrorMessage(error, errorDescription)
-      return NextResponse.redirect(
-        new URL(`/configuracao-bling?error=${encodeURIComponent(errorMessage)}`, request.url),
-      )
+      console.error(`❌ [${requestId}] Erro OAuth:`, error)
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", error)
+      errorUrl.searchParams.set("message", "Erro na autorização OAuth")
+      return NextResponse.redirect(errorUrl)
     }
 
-    // Verifica se o código foi fornecido
+    // Verificar se o código foi fornecido
     if (!code) {
-      console.error("❌ Código de autorização não fornecido")
-      return NextResponse.redirect(
-        new URL("/configuracao-bling?error=Código de autorização não fornecido", request.url),
-      )
+      console.error(`❌ [${requestId}] Código não fornecido`)
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", "missing_code")
+      errorUrl.searchParams.set("message", "Código de autorização não fornecido")
+      return NextResponse.redirect(errorUrl)
     }
 
-    // Troca o código pelos tokens
-    const tokens = await BlingAuth.exchangeCodeForTokens(code)
+    // Construir redirect URI
+    const redirectUri = new URL("/api/auth/bling/callback", request.nextUrl.origin).toString()
+    console.log(`🔗 [${requestId}] Redirect URI:`, redirectUri)
 
-    console.log("✅ Autenticação realizada com sucesso")
+    // Trocar código por tokens
+    console.log(`🔄 [${requestId}] Trocando código por tokens...`)
+    const tokenData = await exchangeCodeForTokens(code, redirectUri)
 
-    // Redireciona para página de sucesso
-    return NextResponse.redirect(new URL("/configuracao-bling?success=true", request.url))
-  } catch (error) {
-    console.error("❌ Erro no callback OAuth:", error)
+    if (!tokenData) {
+      console.error(`❌ [${requestId}] Falha na troca de tokens`)
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", "token_exchange_failed")
+      errorUrl.searchParams.set("message", "Falha ao obter tokens do Bling")
+      return NextResponse.redirect(errorUrl)
+    }
 
-    const errorDetails = BlingErrorHandler.processApiError(error)
-    const userMessage = BlingErrorHandler.getUserFriendlyMessage(error)
+    // Salvar tokens no banco
+    console.log(`💾 [${requestId}] Salvando tokens...`)
+    const saved = await saveTokens(userEmail, tokenData)
 
-    return NextResponse.redirect(new URL(`/configuracao-bling?error=${encodeURIComponent(userMessage)}`, request.url))
+    if (!saved) {
+      console.error(`❌ [${requestId}] Falha ao salvar tokens`)
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", "save_failed")
+      errorUrl.searchParams.set("message", "Falha ao salvar tokens no banco")
+      return NextResponse.redirect(errorUrl)
+    }
+
+    const elapsedTime = Date.now() - startTime
+    console.log(`✅ [${requestId}] OAuth concluído em ${elapsedTime}ms`)
+
+    // Redirecionar para página de sucesso
+    const successUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+    successUrl.searchParams.set("success", "true")
+    successUrl.searchParams.set("message", "Autenticação realizada com sucesso")
+    successUrl.searchParams.set("elapsed_time", elapsedTime.toString())
+
+    return NextResponse.redirect(successUrl)
+  } catch (error: any) {
+    const elapsedTime = Date.now() - startTime
+    console.error(`❌ [${requestId}] Erro no callback OAuth:`, error)
+
+    const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+    errorUrl.searchParams.set("error", "internal_error")
+    errorUrl.searchParams.set("message", error.message || "Erro interno no callback")
+    errorUrl.searchParams.set("elapsed_time", elapsedTime.toString())
+
+    return NextResponse.redirect(errorUrl)
   }
-}
-
-/**
- * Mapeia erros de autorização para mensagens amigáveis
- */
-function getAuthorizationErrorMessage(error: string, description?: string | null): string {
-  const errorMessages: Record<string, string> = {
-    access_denied: "Acesso negado pelo usuário",
-    invalid_request: "Requisição inválida",
-    invalid_client: "Cliente OAuth inválido",
-    invalid_scope: "Escopo inválido",
-    server_error: "Erro interno do servidor",
-    temporarily_unavailable: "Serviço temporariamente indisponível",
-    unsupported_response_type: "Tipo de resposta não suportado",
-    unauthorized_client: "Cliente não autorizado",
-  }
-
-  return errorMessages[error] || description || `Erro de autorização: ${error}`
 }

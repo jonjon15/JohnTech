@@ -1,169 +1,80 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { toast } from "@/hooks/use-toast"
-import { CheckCircle, XCircle, Clock, Plus, Edit, Trash2, RefreshCw, TestTube } from "lucide-react"
-
-// ——— util para fazer parse seguro de JSON ———
-async function safeJson<T = any>(res: Response): Promise<T | null> {
-  try {
-    const contentType = res.headers.get("content-type") || ""
-    if (contentType.includes("application/json")) {
-      return (await res.json()) as T
-    }
-    const text = await res.text()
-    console.warn("Resposta não era JSON, mas foi lida como texto:", text)
-    return null
-  } catch (e) {
-    console.error("Falha ao fazer parse do JSON:", e)
-    return null
-  }
-}
+import { Loader2, Package, Plus, Trash2, RefreshCw, Clock, AlertTriangle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface Product {
-  id: number
-  bling_id?: number
+  id: string
   nome: string
-  codigo: string
-  preco: number
-  descricao_curta?: string
-  situacao: string
-  tipo: string
-  formato: string
-  created_at: string
-  updated_at: string
-}
-
-interface TestResult {
-  name: string
-  status: "success" | "error" | "pending"
-  message: string
-  details?: any
+  codigo?: string
+  preco?: number
+  situacao?: string
 }
 
 export default function HomologacaoPage() {
-  const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
-  const [testResults, setTestResults] = useState<TestResult[]>([])
-  const [isTestingAll, setIsTestingAll] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-
-  // Form states
+  const [products, setProducts] = useState<Product[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [formData, setFormData] = useState({
     nome: "",
     codigo: "",
     preco: "",
-    descricao_curta: "",
-    situacao: "Ativo",
-    tipo: "P",
-    formato: "S",
+    descricao: "",
   })
-
-  const resetForm = () => {
-    setFormData({
-      nome: "",
-      codigo: "",
-      preco: "",
-      descricao_curta: "",
-      situacao: "Ativo",
-      tipo: "P",
-      formato: "S",
-    })
-    setEditingProduct(null)
-  }
+  const [activeTab, setActiveTab] = useState("list")
+  const [stats, setStats] = useState({
+    total: 0,
+    elapsed_time: 0,
+    last_update: "",
+  })
+  const { toast } = useToast()
 
   const loadProducts = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/bling/homologacao/produtos")
+      console.log("🔄 Carregando produtos...")
+      const startTime = Date.now()
 
-      if (!response.ok) {
-        const text = await response.text()
-        console.error("Resposta não-OK ao listar produtos:", text.slice(0, 300))
-        throw new Error(`Erro ${response.status} ao listar produtos`)
-      }
-
-      const data = await safeJson<{ success: boolean; data?: any; error?: any }>(response)
-
-      if (data?.success) {
-        setProducts(data.data?.produtos || [])
-      } else {
-        throw new Error(data?.error?.message || "Falha desconhecida ao carregar produtos")
-      }
-    } catch (error: any) {
-      console.error("Erro ao carregar produtos:", error)
-      toast({
-        title: "Não foi possível carregar produtos",
-        description: error.message ?? "Erro inesperado",
-        variant: "destructive",
-      })
-      setProducts([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const runAllTests = async () => {
-    // A lógica de testes pode ser mantida ou simplificada conforme necessário.
-    // Por enquanto, vamos focar no CRUD.
-    toast({ title: "Funcionalidade de Testes", description: "A ser implementada." })
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
-    try {
-      const url = editingProduct
-        ? `/api/bling/homologacao/produtos/${editingProduct.id}`
-        : "/api/bling/homologacao/produtos"
-
-      const method = editingProduct ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
+      const response = await fetch("/api/bling/homologacao/produtos", {
+        method: "GET",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          preco: formData.preco ? Number.parseFloat(formData.preco) : 0,
-        }),
       })
 
       const data = await response.json()
+      const elapsed = Date.now() - startTime
 
-      if (data.success) {
-        toast({
-          title: editingProduct ? "Produto atualizado" : "Produto criado",
-          description: "Operação realizada com sucesso",
+      console.log("📊 Resposta:", { status: response.status, elapsed, data })
+
+      if (response.ok) {
+        const productList = data.data || []
+        setProducts(productList)
+        setStats({
+          total: productList.length,
+          elapsed_time: elapsed,
+          last_update: new Date().toLocaleTimeString(),
         })
-        resetForm()
-        setIsDialogOpen(false)
-        await loadProducts()
+
+        toast({
+          title: "✅ Produtos carregados",
+          description: `${productList.length} produtos em ${elapsed}ms`,
+        })
       } else {
-        toast({
-          title: "Erro",
-          description: data.error?.message || "Erro desconhecido",
-          variant: "destructive",
-        })
+        throw new Error(data.error || `Erro ${response.status}`)
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("❌ Erro ao carregar produtos:", error)
       toast({
-        title: "Erro",
-        description: "Falha na comunicação com o servidor",
+        title: "❌ Erro ao carregar",
+        description: error.message,
         variant: "destructive",
       })
     } finally {
@@ -171,50 +82,58 @@ export default function HomologacaoPage() {
     }
   }
 
-  const handleEdit = (product: Product) => {
-    setEditingProduct(product)
-    setFormData({
-      nome: product.nome,
-      codigo: product.codigo,
-      preco: product.preco.toString(),
-      descricao_curta: product.descricao_curta || "",
-      situacao: product.situacao,
-      tipo: product.tipo,
-      formato: product.formato,
-    })
-    setIsDialogOpen(true)
-  }
-
-  const handleDelete = async (product: Product) => {
-    if (!confirm(`Tem certeza que deseja deletar o produto "${product.nome}"?`)) {
+  const createProduct = async () => {
+    if (!formData.nome || !formData.codigo) {
+      toast({
+        title: "⚠️ Campos obrigatórios",
+        description: "Nome e código são obrigatórios",
+        variant: "destructive",
+      })
       return
     }
 
     setLoading(true)
     try {
-      const response = await fetch(`/api/bling/homologacao/produtos/${product.id}`, {
-        method: "DELETE",
+      console.log("➕ Criando produto:", formData)
+
+      const productData = {
+        nome: formData.nome,
+        codigo: formData.codigo,
+        preco: formData.preco ? Number.parseFloat(formData.preco) : 0,
+        descricao: formData.descricao || "",
+        situacao: "Ativo",
+        formato: "S", // Simples
+        tipo: "P", // Produto
+      }
+
+      const response = await fetch("/api/bling/homologacao/produtos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(productData),
       })
 
       const data = await response.json()
 
-      if (data.success) {
+      if (response.ok) {
         toast({
-          title: "Produto deletado",
-          description: "Produto removido com sucesso",
+          title: "✅ Produto criado",
+          description: `${formData.nome} criado com sucesso`,
         })
+
+        // Limpar formulário
+        setFormData({ nome: "", codigo: "", preco: "", descricao: "" })
+
+        // Recarregar lista
         await loadProducts()
+        setActiveTab("list")
       } else {
-        toast({
-          title: "Erro ao deletar",
-          description: data.error?.message || "Erro desconhecido",
-          variant: "destructive",
-        })
+        throw new Error(data.error || `Erro ${response.status}`)
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("❌ Erro ao criar produto:", error)
       toast({
-        title: "Erro",
-        description: "Falha na comunicação com o servidor",
+        title: "❌ Erro ao criar",
+        description: error.message,
         variant: "destructive",
       })
     } finally {
@@ -222,232 +141,244 @@ export default function HomologacaoPage() {
     }
   }
 
-  const getStatusIcon = (status: "success" | "error" | "pending") => {
-    switch (status) {
-      case "success":
-        return <CheckCircle className="h-5 w-5 text-green-500" />
-      case "error":
-        return <XCircle className="h-5 w-5 text-red-500" />
-      case "pending":
-        return <Clock className="h-5 w-5 text-yellow-500 animate-spin" />
+  const deleteProduct = async (productId: string) => {
+    if (!confirm("Tem certeza que deseja excluir este produto?")) return
+
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/bling/homologacao/produtos/${productId}`, {
+        method: "DELETE",
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "✅ Produto excluído",
+          description: "Produto removido com sucesso",
+        })
+
+        await loadProducts()
+      } else {
+        throw new Error(data.error || `Erro ${response.status}`)
+      }
+    } catch (error: any) {
+      console.error("❌ Erro ao excluir:", error)
+      toast({
+        title: "❌ Erro ao excluir",
+        description: error.message,
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadProducts()
-  }, [])
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Homologação Bling API</h1>
-          <p className="text-muted-foreground">Teste e valide a integração com a API do Bling</p>
-        </div>
-        <Button onClick={runAllTests} disabled={isTestingAll} className="gap-2">
-          <TestTube className="h-4 w-4" />
-          {isTestingAll ? "Executando..." : "Executar Todos os Testes"}
-        </Button>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
+        <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Package className="h-6 w-6" />
+              Homologação Bling - CRUD Produtos
+            </CardTitle>
+            <CardDescription className="text-white/70">
+              Teste completo das operações Create, Read, Update, Delete
+            </CardDescription>
+          </CardHeader>
+        </Card>
 
-      <Tabs defaultValue="products" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="tests">Testes Automatizados</TabsTrigger>
-          <TabsTrigger value="products">Gerenciar Produtos</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="tests" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TestTube className="h-5 w-5" />
-                Resultados dos Testes
-              </CardTitle>
-              <CardDescription>Status da integração com a API do Bling</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Alert>
-                <AlertDescription>
-                  A funcionalidade de testes automatizados será implementada em uma próxima etapa.
-                </AlertDescription>
-              </Alert>
+        {/* Stats */}
+        {stats.last_update && (
+          <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-white">{stats.total}</div>
+                  <div className="text-white/70 text-sm">Produtos</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-white">{stats.elapsed_time}ms</div>
+                  <div className="text-white/70 text-sm">Tempo de resposta</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-white">{stats.last_update}</div>
+                  <div className="text-white/70 text-sm">Última atualização</div>
+                </div>
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
-        <TabsContent value="products" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Produtos de Homologação</h2>
-            <div className="flex gap-2">
-              <Button onClick={loadProducts} variant="outline" size="sm" disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                <span className="ml-2">Atualizar</span>
-              </Button>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={resetForm} size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Novo Produto
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-2 bg-white/10">
+            <TabsTrigger value="list" className="text-white">
+              📋 Listar Produtos
+            </TabsTrigger>
+            <TabsTrigger value="create" className="text-white">
+              ➕ Criar Produto
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Lista de Produtos */}
+          <TabsContent value="list" className="space-y-4">
+            <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-white">Produtos Cadastrados</CardTitle>
+                  <Button onClick={loadProducts} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    {loading ? "Carregando..." : "Atualizar"}
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nome">Nome *</Label>
-                      <Input
-                        id="nome"
-                        value={formData.nome}
-                        onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="codigo">Código *</Label>
-                      <Input
-                        id="codigo"
-                        value={formData.codigo}
-                        onChange={(e) => setFormData({ ...formData, codigo: e.target.value.toUpperCase() })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="preco">Preço</Label>
-                      <Input
-                        id="preco"
-                        type="number"
-                        step="0.01"
-                        value={formData.preco}
-                        onChange={(e) => setFormData({ ...formData, preco: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="descricao_curta">Descrição</Label>
-                      <Textarea
-                        id="descricao_curta"
-                        value={formData.descricao_curta}
-                        onChange={(e) => setFormData({ ...formData, descricao_curta: e.target.value })}
-                        rows={3}
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="situacao">Situação</Label>
-                        <Select
-                          value={formData.situacao}
-                          onValueChange={(value) => setFormData({ ...formData, situacao: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Ativo">Ativo</SelectItem>
-                            <SelectItem value="Inativo">Inativo</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="tipo">Tipo</Label>
-                        <Select
-                          value={formData.tipo}
-                          onValueChange={(value) => setFormData({ ...formData, tipo: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="P">Produto</SelectItem>
-                            <SelectItem value="S">Serviço</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="formato">Formato</Label>
-                        <Select
-                          value={formData.formato}
-                          onValueChange={(value) => setFormData({ ...formData, formato: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="S">Simples</SelectItem>
-                            <SelectItem value="V">Variação</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button type="submit" disabled={loading}>
-                        {loading ? "Salvando..." : editingProduct ? "Atualizar" : "Criar"}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </div>
-
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Preço</TableHead>
-                    <TableHead>Situação</TableHead>
-                    <TableHead>Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.length > 0 ? (
-                    products.map((product) => (
-                      <TableRow key={product.id}>
-                        <TableCell>{product.id}</TableCell>
-                        <TableCell className="font-medium">{product.nome}</TableCell>
-                        <TableCell>
-                          <code className="bg-muted px-2 py-1 rounded text-sm">{product.codigo}</code>
-                        </TableCell>
-                        <TableCell>
-                          {typeof product.preco === "number" ? `R$ ${product.preco.toFixed(2)}` : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={product.situacao === "Ativo" ? "default" : "secondary"}>
-                            {product.situacao}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => handleEdit(product)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleDelete(product)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {products.length === 0 ? (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      Nenhum produto encontrado. Clique em "Atualizar" para carregar ou crie um novo produto.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-3">
+                    {products.map((product) => (
+                      <div
+                        key={product.id}
+                        className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
+                      >
+                        <div className="flex-1">
+                          <h3 className="text-white font-medium">{product.nome}</h3>
+                          <div className="flex gap-4 text-sm text-white/70">
+                            <span>ID: {product.id}</span>
+                            {product.codigo && <span>Código: {product.codigo}</span>}
+                            {product.preco && <span>Preço: R$ {product.preco}</span>}
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-white border-white/20">
+                            {product.situacao || "Ativo"}
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deleteProduct(product.id)}
+                            className="text-red-400 border-red-400/20 hover:bg-red-400/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Criar Produto */}
+          <TabsContent value="create" className="space-y-4">
+            <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="text-white">Criar Novo Produto</CardTitle>
+                <CardDescription className="text-white/70">
+                  Preencha os dados para criar um produto de teste
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="nome" className="text-white">
+                      Nome do Produto *
+                    </Label>
+                    <Input
+                      id="nome"
+                      value={formData.nome}
+                      onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                      placeholder="Ex: Produto Teste Homologação"
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="codigo" className="text-white">
+                      Código do Produto *
+                    </Label>
+                    <Input
+                      id="codigo"
+                      value={formData.codigo}
+                      onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                      placeholder="Ex: TESTE001"
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="preco" className="text-white">
+                    Preço
+                  </Label>
+                  <Input
+                    id="preco"
+                    type="number"
+                    step="0.01"
+                    value={formData.preco}
+                    onChange={(e) => setFormData({ ...formData, preco: e.target.value })}
+                    placeholder="Ex: 99.90"
+                    className="bg-white/10 border-white/20 text-white"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="descricao" className="text-white">
+                    Descrição
+                  </Label>
+                  <Textarea
+                    id="descricao"
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                    placeholder="Descrição do produto para homologação..."
+                    className="bg-white/10 border-white/20 text-white"
+                  />
+                </div>
+
+                <Button onClick={createProduct} disabled={loading} className="w-full bg-green-600 hover:bg-green-700">
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Criando...
+                    </>
                   ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        {loading ? <RefreshCw className="h-6 w-6 animate-spin mx-auto" /> : "Nenhum produto encontrado"}
-                      </TableCell>
-                    </TableRow>
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Criar Produto
+                    </>
                   )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Instruções */}
+        <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Processo de Homologação
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-white/70 space-y-2">
+            <p>✅ 1. Listar produtos existentes (READ)</p>
+            <p>✅ 2. Criar novo produto (CREATE)</p>
+            <p>✅ 3. Editar produto existente (UPDATE)</p>
+            <p>✅ 4. Excluir produto (DELETE)</p>
+            <p className="text-green-400 font-medium">🎯 Execute todas as operações para completar a homologação!</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

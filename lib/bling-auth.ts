@@ -1,339 +1,214 @@
-import { getPool } from "./db"
-import type { BlingAuthTokens, BlingAuthError } from "@/types/bling"
+import { sql } from "@vercel/postgres"
 
-/**
- * Gerenciador de autenticação OAuth 2.0 do Bling
- * Baseado em: https://developer.bling.com.br/aplicativos#fluxo-de-autorização
- */
-export class BlingAuth {
-  private static readonly CLIENT_ID = process.env.BLING_CLIENT_ID!
-  private static readonly CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
-  private static readonly REDIRECT_URI = `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`
-  private static readonly API_BASE_URL = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+export interface BlingTokenData {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  token_type: string
+  scope?: string
+}
 
-  /**
-   * Gera URL de autorização OAuth 2.0
-   * https://developer.bling.com.br/aplicativos#obtenção-do-authorization-code
-   */
-  static getAuthorizationUrl(state?: string): string {
-    const params = new URLSearchParams({
-      response_type: "code",
-      client_id: this.CLIENT_ID,
-      redirect_uri: this.REDIRECT_URI,
-      scope: "read write",
-      state: state || crypto.randomUUID(),
-    })
+export interface StoredToken {
+  id: number
+  user_email: string
+  access_token: string
+  refresh_token: string
+  expires_at: string
+  created_at: string
+  updated_at: string
+}
 
-    return `https://www.bling.com.br/Api/v3/oauth/authorize?${params.toString()}`
-  }
+const BLING_API_URL = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
+const CLIENT_ID = process.env.BLING_CLIENT_ID!
+const CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
 
-  /**
-   * Troca authorization code por access token
-   * https://developer.bling.com.br/aplicativos#tokens-de-acesso
-   */
-  static async exchangeCodeForTokens(code: string): Promise<BlingAuthTokens> {
-    try {
-      console.log("🔄 Trocando authorization code por tokens...")
+export async function getValidAccessToken(userEmail: string, forceRefresh = false): Promise<string | null> {
+  try {
+    console.log(`🔑 Obtendo token para ${userEmail} (force: ${forceRefresh})`)
 
-      const response = await fetch(`${this.API_BASE_URL}/oauth/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          client_id: this.CLIENT_ID,
-          client_secret: this.CLIENT_SECRET,
-          redirect_uri: this.REDIRECT_URI,
-          code,
-        }),
-      })
+    // Buscar token atual
+    const result = await sql<StoredToken>`
+      SELECT * FROM bling_tokens 
+      WHERE user_email = ${userEmail}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        const error = data as BlingAuthError
-        console.error("❌ Erro ao obter tokens:", error)
-        throw new Error(`Erro de autenticação: ${error.error_description || error.error}`)
-      }
-
-      const tokens: BlingAuthTokens = {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        token_type: data.token_type || "Bearer",
-        expires_in: data.expires_in,
-        expires_at: new Date(Date.now() + data.expires_in * 1000),
-        scope: data.scope,
-      }
-
-      // Salva tokens no banco
-      await this.saveTokens(tokens)
-
-      console.log("✅ Tokens obtidos e salvos com sucesso")
-      return tokens
-    } catch (error) {
-      console.error("❌ Erro ao trocar code por tokens:", error)
-      throw error
-    }
-  }
-
-  /**
-   * Renova access token usando refresh token
-   * https://developer.bling.com.br/aplicativos#refresh-token
-   */
-  static async refreshAccessToken(): Promise<BlingAuthTokens> {
-    try {
-      const currentTokens = await this.getStoredTokens()
-      if (!currentTokens?.refresh_token) {
-        throw new Error("Refresh token não encontrado")
-      }
-
-      console.log("🔄 Renovando access token...")
-
-      const response = await fetch(`${this.API_BASE_URL}/oauth/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          client_id: this.CLIENT_ID,
-          client_secret: this.CLIENT_SECRET,
-          refresh_token: currentTokens.refresh_token,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        const error = data as BlingAuthError
-        console.error("❌ Erro ao renovar token:", error)
-        throw new Error(`Erro ao renovar token: ${error.error_description || error.error}`)
-      }
-
-      const tokens: BlingAuthTokens = {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token || currentTokens.refresh_token,
-        token_type: data.token_type || "Bearer",
-        expires_in: data.expires_in,
-        expires_at: new Date(Date.now() + data.expires_in * 1000),
-        scope: data.scope,
-      }
-
-      // Atualiza tokens no banco
-      await this.saveTokens(tokens)
-
-      console.log("✅ Access token renovado com sucesso")
-      return tokens
-    } catch (error) {
-      console.error("❌ Erro ao renovar access token:", error)
-      throw error
-    }
-  }
-
-  /**
-   * Obtém access token válido (renova se necessário)
-   */
-  static async getValidAccessToken(): Promise<string> {
-    try {
-      const tokens = await this.getStoredTokens()
-      if (!tokens) {
-        throw new Error("Tokens não encontrados. Faça a autenticação primeiro.")
-      }
-
-      // Verifica se o token ainda é válido (com margem de 5 minutos)
-      const now = new Date()
-      const expiresAt = tokens.expires_at ? new Date(tokens.expires_at) : new Date(0)
-      const marginMs = 5 * 60 * 1000 // 5 minutos
-
-      if (expiresAt.getTime() - now.getTime() > marginMs) {
-        return tokens.access_token
-      }
-
-      // Token expirado, tenta renovar
-      console.log("⏰ Access token expirado, renovando...")
-      const newTokens = await this.refreshAccessToken()
-      return newTokens.access_token
-    } catch (error) {
-      console.error("❌ Erro ao obter access token válido:", error)
-      throw error
-    }
-  }
-
-  /**
-   * Salva tokens no banco de dados
-   */
-  private static async saveTokens(tokens: BlingAuthTokens): Promise<void> {
-    const pool = getPool()
-    try {
-      await pool.query(
-        `INSERT INTO bling_auth_tokens 
-         (access_token, refresh_token, token_type, expires_in, expires_at, scope)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (id) DO UPDATE SET
-         access_token = EXCLUDED.access_token,
-         refresh_token = EXCLUDED.refresh_token,
-         token_type = EXCLUDED.token_type,
-         expires_in = EXCLUDED.expires_in,
-         expires_at = EXCLUDED.expires_at,
-         scope = EXCLUDED.scope,
-         updated_at = NOW()`,
-        [
-          tokens.access_token,
-          tokens.refresh_token,
-          tokens.token_type,
-          tokens.expires_in,
-          tokens.expires_at,
-          tokens.scope,
-        ],
-      )
-    } catch (error) {
-      console.error("❌ Erro ao salvar tokens:", error)
-      throw error
-    }
-  }
-
-  /**
-   * Obtém tokens armazenados no banco
-   */
-  private static async getStoredTokens(): Promise<BlingAuthTokens | null> {
-    const pool = getPool()
-    try {
-      const result = await pool.query(
-        `SELECT access_token, refresh_token, token_type, expires_in, expires_at, scope
-         FROM bling_auth_tokens 
-         ORDER BY created_at DESC 
-         LIMIT 1`,
-      )
-
-      if (result.rows.length === 0) {
-        return null
-      }
-
-      const row = result.rows[0]
-      return {
-        access_token: row.access_token,
-        refresh_token: row.refresh_token,
-        token_type: row.token_type,
-        expires_in: row.expires_in,
-        expires_at: row.expires_at ? new Date(row.expires_at) : undefined,
-        scope: row.scope,
-      }
-    } catch (error) {
-      console.error("❌ Erro ao obter tokens armazenados:", error)
+    if (result.rows.length === 0) {
+      console.log("❌ Nenhum token encontrado")
       return null
     }
-  }
 
-  /**
-   * Revoga access token
-   * https://developer.bling.com.br/aplicativos#revogando-o-access-token
-   */
-  static async revokeAccessToken(): Promise<void> {
-    try {
-      const tokens = await this.getStoredTokens()
-      if (!tokens) {
-        console.log("ℹ️ Nenhum token para revogar")
-        return
-      }
+    const token = result.rows[0]
+    const expiresAt = new Date(token.expires_at)
+    const now = new Date()
+    const isExpired = now >= expiresAt
 
-      console.log("🔄 Revogando access token...")
+    console.log(`📅 Token expira em: ${expiresAt.toISOString()}`)
+    console.log(`⏰ Agora: ${now.toISOString()}`)
+    console.log(`🔍 Expirado: ${isExpired}`)
 
-      const response = await fetch(`${this.API_BASE_URL}/oauth/revoke`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          token: tokens.access_token,
-          client_id: this.CLIENT_ID,
-          client_secret: this.CLIENT_SECRET,
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        console.error("❌ Erro ao revogar token:", error)
-        throw new Error(`Erro ao revogar token: ${error.error_description || error.error}`)
-      }
-
-      // Remove tokens do banco
-      const pool = getPool()
-      await pool.query("DELETE FROM bling_auth_tokens")
-
-      console.log("✅ Access token revogado com sucesso")
-    } catch (error) {
-      console.error("❌ Erro ao revogar access token:", error)
-      throw error
+    // Se não expirou e não é refresh forçado, retornar token atual
+    if (!isExpired && !forceRefresh) {
+      console.log("✅ Token válido encontrado")
+      return token.access_token
     }
-  }
 
-  /**
-   * Verifica se está autenticado
-   */
-  static async isAuthenticated(): Promise<boolean> {
-    try {
-      const tokens = await this.getStoredTokens()
-      return tokens !== null && tokens.access_token !== ""
-    } catch (error) {
-      console.error("❌ Erro ao verificar autenticação:", error)
-      return false
+    // Tentar refresh
+    console.log("🔄 Tentando refresh do token...")
+    const refreshed = await refreshAccessToken(userEmail, token.refresh_token)
+
+    if (refreshed) {
+      console.log("✅ Token refreshed com sucesso")
+      return refreshed
     }
+
+    console.log("❌ Falha no refresh, token inválido")
+    return null
+  } catch (error) {
+    console.error("❌ Erro ao obter token:", error)
+    return null
   }
+}
 
-  /**
-   * Obtém informações do usuário autenticado
-   * https://developer.bling.com.br/aplicativos#obter-recurso-do-usuário
-   */
-  static async getUserInfo(): Promise<any> {
-    try {
-      const accessToken = await this.getValidAccessToken()
+export async function refreshAccessToken(userEmail: string, refreshToken: string): Promise<string | null> {
+  try {
+    console.log("🔄 Iniciando refresh do token...")
 
-      const response = await fetch(`${this.API_BASE_URL}/me`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/json",
-        },
-      })
+    const response = await fetch(`${BLING_API_URL}/oauth/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+      }),
+    })
 
-      if (!response.ok) {
-        throw new Error(`Erro ao obter informações do usuário: ${response.status}`)
-      }
-
-      const data = await response.json()
-      return data.data
-    } catch (error) {
-      console.error("❌ Erro ao obter informações do usuário:", error)
-      throw error
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("❌ Erro no refresh:", response.status, errorText)
+      return null
     }
+
+    const data: BlingTokenData = await response.json()
+    console.log("📦 Dados do refresh:", { expires_in: data.expires_in, token_type: data.token_type })
+
+    // Calcular nova data de expiração
+    const expiresAt = new Date()
+    expiresAt.setSeconds(expiresAt.getSeconds() + data.expires_in)
+
+    // Salvar novo token
+    await sql`
+      UPDATE bling_tokens 
+      SET 
+        access_token = ${data.access_token},
+        refresh_token = ${data.refresh_token},
+        expires_at = ${expiresAt.toISOString()},
+        updated_at = NOW()
+      WHERE user_email = ${userEmail}
+    `
+
+    console.log("✅ Token atualizado no banco")
+    return data.access_token
+  } catch (error) {
+    console.error("❌ Erro no refresh:", error)
+    return null
   }
+}
 
-  /**
-   * Obtém status da autenticação
-   */
-  static async getAuthStatus(): Promise<{
-    authenticated: boolean
-    expiresAt?: Date
-    userInfo?: any
-  }> {
-    try {
-      const tokens = await this.getStoredTokens()
-      if (!tokens) {
-        return { authenticated: false }
-      }
+export async function saveTokens(userEmail: string, tokenData: BlingTokenData): Promise<boolean> {
+  try {
+    console.log("💾 Salvando tokens para:", userEmail)
 
-      const userInfo = await this.getUserInfo()
-      return {
-        authenticated: true,
-        expiresAt: tokens.expires_at,
-        userInfo,
-      }
-    } catch (error) {
-      console.error("❌ Erro ao obter status da autenticação:", error)
-      return { authenticated: false }
+    const expiresAt = new Date()
+    expiresAt.setSeconds(expiresAt.getSeconds() + tokenData.expires_in)
+
+    await sql`
+      INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at, created_at, updated_at)
+      VALUES (${userEmail}, ${tokenData.access_token}, ${tokenData.refresh_token}, ${expiresAt.toISOString()}, NOW(), NOW())
+      ON CONFLICT (user_email) 
+      DO UPDATE SET 
+        access_token = ${tokenData.access_token},
+        refresh_token = ${tokenData.refresh_token},
+        expires_at = ${expiresAt.toISOString()},
+        updated_at = NOW()
+    `
+
+    console.log("✅ Tokens salvos com sucesso")
+    return true
+  } catch (error) {
+    console.error("❌ Erro ao salvar tokens:", error)
+    return false
+  }
+}
+
+export async function clearTokens(userEmail: string): Promise<boolean> {
+  try {
+    console.log("🗑️ Removendo tokens para:", userEmail)
+
+    const result = await sql`
+      DELETE FROM bling_tokens 
+      WHERE user_email = ${userEmail}
+    `
+
+    console.log("✅ Tokens removidos:", result.rowCount)
+    return true
+  } catch (error) {
+    console.error("❌ Erro ao remover tokens:", error)
+    return false
+  }
+}
+
+export async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<BlingTokenData | null> {
+  try {
+    console.log("🔄 Trocando código por tokens...")
+
+    const response = await fetch(`${BLING_API_URL}/oauth/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code,
+        redirect_uri: redirectUri,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("❌ Erro na troca:", response.status, errorText)
+      return null
     }
+
+    const data: BlingTokenData = await response.json()
+    console.log("✅ Tokens obtidos com sucesso")
+    return data
+  } catch (error) {
+    console.error("❌ Erro na troca de código:", error)
+    return null
   }
+}
+
+export function generateAuthUrl(redirectUri: string, state?: string): string {
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: CLIENT_ID,
+    redirect_uri: redirectUri,
+    scope: "read write",
+  })
+
+  if (state) {
+    params.append("state", state)
+  }
+
+  return `${BLING_API_URL}/oauth/authorize?${params.toString()}`
 }

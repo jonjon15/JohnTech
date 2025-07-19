@@ -1,69 +1,76 @@
 import { NextResponse } from "next/server"
-import { BlingAuth } from "@/lib/bling-auth"
-import { BlingApiClient } from "@/lib/bling-api-client"
-import { WebhookHandler } from "@/lib/webhook-handler"
+import { getValidAccessToken } from "@/lib/bling-auth"
 
-/**
- * Endpoint para verificar status da integração com Bling
- */
 export async function GET() {
   try {
-    console.log("🔍 Verificando status da integração...")
+    console.log("=== VERIFICANDO STATUS DO BLING ===")
 
-    // Verifica autenticação
-    const authStatus = await BlingAuth.getAuthStatus()
+    const userEmail = "admin@johntech.com"
 
-    // Verifica conectividade com API
-    const apiConnected = authStatus.authenticated ? await BlingApiClient.testConnection() : false
+    // Verificar se temos token válido
+    const token = await getValidAccessToken(userEmail)
 
-    // Obtém estatísticas de rate limit
-    const rateLimit = BlingApiClient.getRateLimit()
-
-    // Obtém estatísticas de webhooks
-    const webhookStats = await WebhookHandler.getWebhookStats()
-
-    const status = {
-      timestamp: new Date().toISOString(),
-      authentication: {
-        authenticated: authStatus.authenticated,
-        expiresAt: authStatus.expiresAt,
-        userInfo: authStatus.userInfo,
-      },
-      api: {
-        connected: apiConnected,
-        rateLimit: {
-          limit: rateLimit.limit,
-          remaining: rateLimit.remaining,
-          resetAt: new Date(rateLimit.reset).toISOString(),
-        },
-      },
-      webhooks: webhookStats,
-      overall: {
-        status: authStatus.authenticated && apiConnected ? "healthy" : "error",
-        message: authStatus.authenticated
-          ? apiConnected
-            ? "Integração funcionando normalmente"
-            : "Problemas de conectividade com a API"
-          : "Não autenticado",
-      },
+    if (!token) {
+      return NextResponse.json({
+        status: "error",
+        message: "Token não encontrado",
+        details: "Faça a autenticação OAuth primeiro",
+        auth_required: true,
+      })
     }
 
-    console.log("✅ Status verificado:", status.overall.status)
+    // Testar conectividade com API do Bling
+    const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
 
-    return NextResponse.json(status)
-  } catch (error) {
-    console.error("❌ Erro ao verificar status:", error)
+    console.log("Testando conectividade com:", blingApiUrl)
 
-    return NextResponse.json(
-      {
-        timestamp: new Date().toISOString(),
-        overall: {
-          status: "error",
-          message: "Erro ao verificar status da integração",
-        },
-        error: error instanceof Error ? error.message : String(error),
+    const response = await fetch(`${blingApiUrl}/me`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "User-Agent": "BlingPro/1.0",
       },
-      { status: 500 },
-    )
+      signal: AbortSignal.timeout(8000), // 8 segundos timeout
+    })
+
+    const responseText = await response.text()
+
+    console.log("Resposta do Bling:", {
+      status: response.status,
+      body: responseText.substring(0, 200),
+    })
+
+    if (!response.ok) {
+      return NextResponse.json({
+        status: "error",
+        message: "Erro na API do Bling",
+        details: {
+          status: response.status,
+          response: responseText,
+        },
+        bling_api_status: "down",
+      })
+    }
+
+    const data = JSON.parse(responseText)
+
+    return NextResponse.json({
+      status: "success",
+      message: "Bling API funcionando",
+      bling_api_status: "up",
+      user_info: data.data || data,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error: any) {
+    console.error("Erro no status do Bling:", error)
+
+    return NextResponse.json({
+      status: "error",
+      message: "Erro interno",
+      details: error.message,
+      bling_api_status: "unknown",
+      timestamp: new Date().toISOString(),
+    })
   }
 }
