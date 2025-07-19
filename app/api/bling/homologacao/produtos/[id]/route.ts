@@ -1,120 +1,112 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { createBlingApiResponse, handleBlingApiError } from "@/lib/bling-error-handler"
+import { createBlingApiResponse, handleBlingApiError, logBlingApiCall } from "@/lib/bling-error-handler"
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const startTime = Date.now()
+
   try {
     const productId = Number.parseInt(params.id)
 
     if (isNaN(productId)) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "INVALID_ID",
-          message: "ID do produto inválido",
+          code: "VALIDATION_ERROR",
+          message: "ID do produto deve ser um número válido",
           statusCode: 400,
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400 },
       )
     }
 
-    console.log(`🗑️ DELETE /api/bling/homologacao/produtos/${productId} - Iniciando...`)
-
-    // Verificar se o produto existe
-    const existingProduct = await sql`
-      SELECT id, nome, codigo FROM bling_products WHERE id = ${productId}
+    const result = await sql`
+      SELECT * FROM bling_products WHERE id = ${productId}
     `
 
-    if (existingProduct.rows.length === 0) {
+    if (result.rows.length === 0) {
+      const duration = Date.now() - startTime
+      logBlingApiCall("GET", `/homologacao/produtos/${productId}`, 404, duration)
+
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "PRODUCT_NOT_FOUND",
+          code: "RESOURCE_NOT_FOUND",
           message: "Produto não encontrado",
           statusCode: 404,
         }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
+        { status: 404 },
       )
     }
 
-    // Deletar o produto
-    await sql`
-      DELETE FROM bling_products WHERE id = ${productId}
-    `
-
-    const product = existingProduct.rows[0]
-    console.log(`✅ Produto deletado: ${product.nome} (ID: ${productId})`)
+    const duration = Date.now() - startTime
+    logBlingApiCall("GET", `/homologacao/produtos/${productId}`, 200, duration)
 
     return NextResponse.json(
-      createBlingApiResponse(true, {
-        message: "Produto removido com sucesso",
-        deleted_product: {
-          id: productId,
-          nome: product.nome,
-          codigo: product.codigo,
-        },
-      }),
+      createBlingApiResponse(true, { data: result.rows[0] }, undefined, { elapsed_time: duration }),
       {
-        status: 200,
         headers: {
           "Content-Type": "application/json",
-          "x-bling-homologacao": crypto.randomUUID(),
+          "x-bling-homologacao": "true",
         },
       },
     )
   } catch (error: any) {
-    console.error(`❌ Erro em DELETE produto ${params.id}:`, error)
+    const duration = Date.now() - startTime
+    logBlingApiCall("GET", `/homologacao/produtos/${params.id}`, 500, duration)
 
-    const blingError = handleBlingApiError(error, "delete-homolog-product")
+    const blingError = handleBlingApiError(error, "get-product")
     return NextResponse.json(createBlingApiResponse(false, null, blingError), {
       status: blingError.statusCode || 500,
-      headers: { "Content-Type": "application/json" },
     })
   }
 }
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+  const startTime = Date.now()
+
   try {
     const productId = Number.parseInt(params.id)
+    const body = await request.json()
+    const { nome, codigo, preco, descricao, situacao } = body
 
     if (isNaN(productId)) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "INVALID_ID",
-          message: "ID do produto inválido",
+          code: "VALIDATION_ERROR",
+          message: "ID do produto deve ser um número válido",
           statusCode: 400,
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400 },
       )
     }
 
-    console.log(`✏️ PUT /api/bling/homologacao/produtos/${productId} - Iniciando...`)
-
-    const body = await request.json()
-    const { nome, codigo, preco, descricao } = body
-
+    // Validação de campos obrigatórios
     if (!nome || !codigo) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "VALIDATION_ERROR",
-          message: "Nome e código são obrigatórios",
+          code: "MISSING_REQUIRED_FIELD",
+          message: "Os campos 'nome' e 'codigo' são obrigatórios",
           statusCode: 400,
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400 },
       )
     }
 
-    // Verificar se o produto existe
+    // Verificar se produto existe
     const existingProduct = await sql`
       SELECT id FROM bling_products WHERE id = ${productId}
     `
 
     if (existingProduct.rows.length === 0) {
+      const duration = Date.now() - startTime
+      logBlingApiCall("PUT", `/homologacao/produtos/${productId}`, 404, duration)
+
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "PRODUCT_NOT_FOUND",
+          code: "RESOURCE_NOT_FOUND",
           message: "Produto não encontrado",
           statusCode: 404,
         }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
+        { status: 404 },
       )
     }
 
@@ -126,129 +118,210 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (duplicateCode.rows.length > 0) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "DUPLICATE_CODE",
+          code: "VALIDATION_ERROR",
           message: "Já existe outro produto com este código",
-          statusCode: 409,
+          statusCode: 422,
         }),
-        { status: 409, headers: { "Content-Type": "application/json" } },
+        { status: 422 },
       )
     }
 
     // Atualizar produto
     const result = await sql`
       UPDATE bling_products 
-      SET nome = ${nome}, codigo = ${codigo}, preco = ${preco || 0}, 
-          descricao = ${descricao || ""}, updated_at = NOW()
+      SET nome = ${nome}, 
+          codigo = ${codigo}, 
+          preco = ${preco || 0}, 
+          descricao = ${descricao || ""}, 
+          situacao = ${situacao || "Ativo"},
+          updated_at = NOW()
       WHERE id = ${productId}
       RETURNING *
     `
 
-    const updatedProduct = result.rows[0]
-    console.log(`✅ Produto atualizado: ${updatedProduct.nome} (ID: ${productId})`)
+    const duration = Date.now() - startTime
+    logBlingApiCall("PUT", `/homologacao/produtos/${productId}`, 200, duration)
 
     return NextResponse.json(
-      createBlingApiResponse(true, {
-        message: "Produto atualizado com sucesso",
-        produto: updatedProduct,
-      }),
+      createBlingApiResponse(true, { data: result.rows[0] }, undefined, { elapsed_time: duration }),
       {
-        status: 200,
         headers: {
           "Content-Type": "application/json",
-          "x-bling-homologacao": crypto.randomUUID(),
+          "x-bling-homologacao": "true",
         },
       },
     )
   } catch (error: any) {
-    console.error(`❌ Erro em PUT produto ${params.id}:`, error)
+    const duration = Date.now() - startTime
+    logBlingApiCall("PUT", `/homologacao/produtos/${params.id}`, 500, duration)
 
-    const blingError = handleBlingApiError(error, "update-homolog-product")
+    const blingError = handleBlingApiError(error, "update-product")
     return NextResponse.json(createBlingApiResponse(false, null, blingError), {
       status: blingError.statusCode || 500,
-      headers: { "Content-Type": "application/json" },
     })
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  const startTime = Date.now()
+
   try {
     const productId = Number.parseInt(params.id)
 
     if (isNaN(productId)) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "INVALID_ID",
-          message: "ID do produto inválido",
+          code: "VALIDATION_ERROR",
+          message: "ID do produto deve ser um número válido",
           statusCode: 400,
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400 },
       )
     }
 
-    console.log(`🔄 PATCH /api/bling/homologacao/produtos/${productId} - Iniciando...`)
+    // Verificar se produto existe
+    const existingProduct = await sql`
+      SELECT id, nome, codigo FROM bling_products WHERE id = ${productId}
+    `
 
+    if (existingProduct.rows.length === 0) {
+      const duration = Date.now() - startTime
+      logBlingApiCall("DELETE", `/homologacao/produtos/${productId}`, 404, duration)
+
+      return NextResponse.json(
+        createBlingApiResponse(false, null, {
+          code: "RESOURCE_NOT_FOUND",
+          message: "Produto não encontrado",
+          statusCode: 404,
+        }),
+        { status: 404 },
+      )
+    }
+
+    // Deletar produto
+    await sql`
+      DELETE FROM bling_products WHERE id = ${productId}
+    `
+
+    const duration = Date.now() - startTime
+    logBlingApiCall("DELETE", `/homologacao/produtos/${productId}`, 200, duration)
+
+    return NextResponse.json(
+      createBlingApiResponse(
+        true,
+        {
+          message: "Produto removido com sucesso",
+          deleted_product: existingProduct.rows[0],
+        },
+        undefined,
+        { elapsed_time: duration },
+      ),
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-bling-homologacao": "true",
+        },
+      },
+    )
+  } catch (error: any) {
+    const duration = Date.now() - startTime
+    logBlingApiCall("DELETE", `/homologacao/produtos/${params.id}`, 500, duration)
+
+    const blingError = handleBlingApiError(error, "delete-product")
+    return NextResponse.json(createBlingApiResponse(false, null, blingError), {
+      status: blingError.statusCode || 500,
+    })
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  const startTime = Date.now()
+
+  try {
+    const productId = Number.parseInt(params.id)
     const body = await request.json()
     const { situacao } = body
 
-    if (!situacao || !["A", "I"].includes(situacao)) {
+    if (isNaN(productId)) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
           code: "VALIDATION_ERROR",
-          message: "Situação deve ser 'A' (Ativo) ou 'I' (Inativo)",
+          message: "ID do produto deve ser um número válido",
           statusCode: 400,
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400 },
       )
     }
 
-    // Verificar se o produto existe
+    // Validar situação
+    if (!situacao || !["A", "I", "Ativo", "Inativo"].includes(situacao)) {
+      return NextResponse.json(
+        createBlingApiResponse(false, null, {
+          code: "VALIDATION_ERROR",
+          message: "Situação deve ser 'A' (Ativo), 'I' (Inativo), 'Ativo' ou 'Inativo'",
+          statusCode: 400,
+        }),
+        { status: 400 },
+      )
+    }
+
+    // Verificar se produto existe
     const existingProduct = await sql`
       SELECT id, nome FROM bling_products WHERE id = ${productId}
     `
 
     if (existingProduct.rows.length === 0) {
+      const duration = Date.now() - startTime
+      logBlingApiCall("PATCH", `/homologacao/produtos/${productId}`, 404, duration)
+
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "PRODUCT_NOT_FOUND",
+          code: "RESOURCE_NOT_FOUND",
           message: "Produto não encontrado",
           statusCode: 404,
         }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
+        { status: 404 },
       )
     }
 
+    // Normalizar situação
+    const situacaoNormalizada = situacao === "A" || situacao === "Ativo" ? "Ativo" : "Inativo"
+
     // Atualizar situação
-    const situacaoTexto = situacao === "A" ? "Ativo" : "Inativo"
     await sql`
       UPDATE bling_products 
-      SET situacao = ${situacaoTexto}, updated_at = NOW()
+      SET situacao = ${situacaoNormalizada}, updated_at = NOW()
       WHERE id = ${productId}
     `
 
-    const product = existingProduct.rows[0]
-    console.log(`✅ Situação do produto alterada: ${product.nome} -> ${situacaoTexto}`)
+    const duration = Date.now() - startTime
+    logBlingApiCall("PATCH", `/homologacao/produtos/${productId}`, 200, duration)
 
     return NextResponse.json(
-      createBlingApiResponse(true, {
-        message: `Situação alterada para ${situacaoTexto}`,
-        produto_id: productId,
-        nova_situacao: situacaoTexto,
-      }),
+      createBlingApiResponse(
+        true,
+        {
+          message: `Situação alterada para ${situacaoNormalizada}`,
+          produto_id: productId,
+          nova_situacao: situacaoNormalizada,
+        },
+        undefined,
+        { elapsed_time: duration },
+      ),
       {
-        status: 200,
         headers: {
           "Content-Type": "application/json",
-          "x-bling-homologacao": crypto.randomUUID(),
+          "x-bling-homologacao": "true",
         },
       },
     )
   } catch (error: any) {
-    console.error(`❌ Erro em PATCH produto ${params.id}:`, error)
+    const duration = Date.now() - startTime
+    logBlingApiCall("PATCH", `/homologacao/produtos/${params.id}`, 500, duration)
 
-    const blingError = handleBlingApiError(error, "patch-homolog-product")
+    const blingError = handleBlingApiError(error, "patch-product")
     return NextResponse.json(createBlingApiResponse(false, null, blingError), {
       status: blingError.statusCode || 500,
-      headers: { "Content-Type": "application/json" },
     })
   }
 }

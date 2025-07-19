@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { createBlingApiResponse, handleBlingApiError } from "@/lib/bling-error-handler"
+import { createBlingApiResponse, handleBlingApiError, logBlingApiCall } from "@/lib/bling-error-handler"
 
 export async function GET(request: NextRequest) {
+  const startTime = Date.now()
+
   try {
     console.log("🔍 GET /api/bling/homologacao/produtos - Iniciando...")
 
@@ -25,20 +27,31 @@ export async function GET(request: NextRequest) {
           message: `Tabelas não encontradas: ${missingTables.join(", ")}. Execute o script SQL primeiro.`,
           statusCode: 500,
         }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+        { status: 500 },
       )
     }
 
-    // Buscar produtos locais
+    // Buscar produtos locais com paginação
+    const { searchParams } = new URL(request.url)
+    const limit = Math.min(Number.parseInt(searchParams.get("limite") || "50"), 100)
+    const offset = Number.parseInt(searchParams.get("pagina") || "1") - 1
+
     const localProducts = await sql`
       SELECT * FROM bling_products 
       ORDER BY created_at DESC
+      LIMIT ${limit} OFFSET ${offset * limit}
     `
+
+    // Contar total de produtos
+    const countResult = await sql`
+      SELECT COUNT(*) as total FROM bling_products
+    `
+
+    const total = Number.parseInt(countResult.rows[0].total)
 
     // Tentar buscar produtos do Bling (se autenticado)
     let blingProducts = { count: 0, items: [], error: null }
     try {
-      // Verificar se há token válido
       const tokenCheck = await sql`
         SELECT access_token, expires_at 
         FROM bling_auth_tokens 
@@ -48,11 +61,11 @@ export async function GET(request: NextRequest) {
       `
 
       if (tokenCheck.rows.length > 0) {
-        // Fazer requisição para API do Bling
-        const blingResponse = await fetch("https://www.bling.com.br/Api/v3/produtos?limite=10", {
+        const blingResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos?limite=${limit}`, {
           headers: {
             Authorization: `Bearer ${tokenCheck.rows[0].access_token}`,
             Accept: "application/json",
+            "User-Agent": "BlingPro/1.0",
           },
           signal: AbortSignal.timeout(10000),
         })
@@ -77,6 +90,7 @@ export async function GET(request: NextRequest) {
     const responseData = {
       local_products: {
         count: localProducts.rows.length,
+        total: total,
         items: localProducts.rows,
       },
       bling_products: blingProducts,
@@ -88,42 +102,55 @@ export async function GET(request: NextRequest) {
         bling_connected: blingProducts.error === null,
         token_valid: blingProducts.error !== "Token não encontrado ou expirado",
       },
+      pagination: {
+        current_page: Math.floor(offset) + 1,
+        per_page: limit,
+        total_pages: Math.ceil(total / limit),
+        total_items: total,
+      },
     }
 
-    console.log(`✅ Dados carregados: ${localProducts.rows.length} produtos locais, ${blingProducts.count} do Bling`)
+    const duration = Date.now() - startTime
+    logBlingApiCall("GET", "/homologacao/produtos", 200, duration)
 
-    return NextResponse.json(createBlingApiResponse(true, responseData), {
+    return NextResponse.json(createBlingApiResponse(true, responseData, undefined, { elapsed_time: duration }), {
       headers: {
         "Content-Type": "application/json",
-        "x-bling-homologacao": crypto.randomUUID(),
+        "x-bling-homologacao": "true",
+        "x-total-count": total.toString(),
       },
     })
   } catch (error: any) {
+    const duration = Date.now() - startTime
     console.error("❌ Erro em GET produtos homologação:", error)
 
+    logBlingApiCall("GET", "/homologacao/produtos", 500, duration)
     const blingError = handleBlingApiError(error, "get-homolog-products")
     return NextResponse.json(createBlingApiResponse(false, null, blingError), {
       status: blingError.statusCode || 500,
-      headers: { "Content-Type": "application/json" },
     })
   }
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+
   try {
     console.log("➕ POST /api/bling/homologacao/produtos - Iniciando...")
 
     const body = await request.json()
-    const { nome, codigo, preco, descricao } = body
+    const { nome, codigo, preco, descricao, situacao } = body
 
+    // Validação conforme documentação Bling
     if (!nome || !codigo) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "VALIDATION_ERROR",
-          message: "Nome e código são obrigatórios",
+          code: "MISSING_REQUIRED_FIELD",
+          message: "Os campos 'nome' e 'codigo' são obrigatórios",
           statusCode: 400,
+          details: { required_fields: ["nome", "codigo"] },
         }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+        { status: 400 },
       )
     }
 
@@ -135,48 +162,68 @@ export async function POST(request: NextRequest) {
     if (existingProduct.rows.length > 0) {
       return NextResponse.json(
         createBlingApiResponse(false, null, {
-          code: "DUPLICATE_CODE",
+          code: "VALIDATION_ERROR",
           message: "Já existe um produto com este código",
-          statusCode: 409,
+          statusCode: 422,
+          details: { field: "codigo", value: codigo },
         }),
-        { status: 409, headers: { "Content-Type": "application/json" } },
+        { status: 422 },
       )
     }
 
     // Inserir produto
     const result = await sql`
-      INSERT INTO bling_products (nome, codigo, preco, descricao, situacao)
-      VALUES (${nome}, ${codigo}, ${preco || 0}, ${descricao || ""}, 'Ativo')
+      INSERT INTO bling_products (nome, codigo, preco, descricao, situacao, tipo, formato)
+      VALUES (
+        ${nome}, 
+        ${codigo}, 
+        ${preco || 0}, 
+        ${descricao || ""}, 
+        ${situacao || "Ativo"},
+        'P',
+        'S'
+      )
       RETURNING *
     `
 
     const newProduct = result.rows[0]
-    console.log(`✅ Produto criado: ${newProduct.nome} (ID: ${newProduct.id})`)
+    const duration = Date.now() - startTime
+
+    logBlingApiCall("POST", "/homologacao/produtos", 201, duration)
 
     return NextResponse.json(
-      createBlingApiResponse(true, {
-        data: {
-          id: newProduct.id,
-          nome: newProduct.nome,
-          preco: newProduct.preco,
-          codigo: newProduct.codigo,
+      createBlingApiResponse(
+        true,
+        {
+          data: {
+            id: newProduct.id,
+            nome: newProduct.nome,
+            codigo: newProduct.codigo,
+            preco: newProduct.preco,
+            descricao: newProduct.descricao,
+            situacao: newProduct.situacao,
+          },
         },
-      }),
+        undefined,
+        { elapsed_time: duration },
+      ),
       {
         status: 201,
         headers: {
           "Content-Type": "application/json",
-          "x-bling-homologacao": crypto.randomUUID(),
+          "x-bling-homologacao": "true",
+          Location: `/api/bling/homologacao/produtos/${newProduct.id}`,
         },
       },
     )
   } catch (error: any) {
+    const duration = Date.now() - startTime
     console.error("❌ Erro em POST produto homologação:", error)
 
+    logBlingApiCall("POST", "/homologacao/produtos", 500, duration)
     const blingError = handleBlingApiError(error, "create-homolog-product")
     return NextResponse.json(createBlingApiResponse(false, null, blingError), {
       status: blingError.statusCode || 500,
-      headers: { "Content-Type": "application/json" },
     })
   }
 }

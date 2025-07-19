@@ -1,30 +1,39 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 
+const BLING_API_URL = "https://www.bling.com.br/Api/v3"
+
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
     const code = searchParams.get("code")
     const state = searchParams.get("state")
     const error = searchParams.get("error")
 
     // Verificar se houve erro na autorização
     if (error) {
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/auth?error=${encodeURIComponent(error)}`)
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", error)
+      return NextResponse.redirect(errorUrl)
     }
 
-    // Verificar state para segurança
-    const savedState = request.cookies.get("bling_oauth_state")?.value
-    if (!state || state !== savedState) {
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/auth?error=invalid_state`)
-    }
-
+    // Verificar código
     if (!code) {
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/auth?error=no_code`)
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", "missing_code")
+      return NextResponse.redirect(errorUrl)
+    }
+
+    // Verificar state (CSRF protection)
+    const savedState = request.cookies.get("bling_oauth_state")?.value
+    if (!savedState || savedState !== state) {
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", "invalid_state")
+      return NextResponse.redirect(errorUrl)
     }
 
     // Trocar código por tokens
-    const tokenResponse = await fetch("https://bling.com.br/Api/v3/oauth/token", {
+    const tokenResponse = await fetch(`${BLING_API_URL}/oauth/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -32,37 +41,26 @@ export async function GET(request: NextRequest) {
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
+        code: code,
+        redirect_uri: `${request.nextUrl.origin}/api/bling/oauth/callback`,
         client_id: process.env.BLING_CLIENT_ID!,
         client_secret: process.env.BLING_CLIENT_SECRET!,
-        redirect_uri: `${process.env.NEXT_PUBLIC_BASE_URL}/api/bling/oauth/callback`,
-        code,
       }),
     })
 
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.text()
-      console.error("Erro ao obter tokens:", errorData)
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/auth?error=token_error`)
+      const errorText = await tokenResponse.text()
+      console.error("Erro ao obter tokens:", errorText)
+      const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+      errorUrl.searchParams.set("error", "token_exchange_failed")
+      return NextResponse.redirect(errorUrl)
     }
 
-    const tokens = await tokenResponse.json()
-
-    // Obter informações do usuário
-    const userResponse = await fetch("https://bling.com.br/Api/v3/usuario", {
-      headers: {
-        Authorization: `Bearer ${tokens.access_token}`,
-        Accept: "application/json",
-      },
-    })
-
-    let userEmail = "usuario@bling.com"
-    if (userResponse.ok) {
-      const userData = await userResponse.json()
-      userEmail = userData.data?.email || userEmail
-    }
+    const tokenData = await tokenResponse.json()
 
     // Calcular data de expiração
-    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000)
+    const expiresAt = new Date()
+    expiresAt.setSeconds(expiresAt.getSeconds() + tokenData.expires_in)
 
     // Salvar tokens no banco
     await sql`
@@ -70,19 +68,23 @@ export async function GET(request: NextRequest) {
         user_email, 
         access_token, 
         refresh_token, 
-        token_type, 
-        expires_at, 
-        scope
+        token_type,
+        expires_at,
+        scope,
+        created_at,
+        updated_at
       ) VALUES (
-        ${userEmail},
-        ${tokens.access_token},
-        ${tokens.refresh_token},
-        ${tokens.token_type || "Bearer"},
+        'admin@johntech.com',
+        ${tokenData.access_token},
+        ${tokenData.refresh_token},
+        ${tokenData.token_type || "Bearer"},
         ${expiresAt.toISOString()},
-        ${tokens.scope || ""}
+        ${tokenData.scope || ""},
+        NOW(),
+        NOW()
       )
       ON CONFLICT (user_email) 
-      DO UPDATE SET
+      DO UPDATE SET 
         access_token = EXCLUDED.access_token,
         refresh_token = EXCLUDED.refresh_token,
         token_type = EXCLUDED.token_type,
@@ -92,12 +94,17 @@ export async function GET(request: NextRequest) {
     `
 
     // Limpar cookie de state
-    const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/dashboard?auth=success`)
+    const successUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+    successUrl.searchParams.set("success", "true")
+
+    const response = NextResponse.redirect(successUrl)
     response.cookies.delete("bling_oauth_state")
 
     return response
   } catch (error) {
     console.error("Erro no callback OAuth:", error)
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL}/auth?error=callback_error`)
+    const errorUrl = new URL("/configuracao-bling", request.nextUrl.origin)
+    errorUrl.searchParams.set("error", "internal_error")
+    return NextResponse.redirect(errorUrl)
   }
 }
