@@ -1,70 +1,65 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { createBlingApiResponse, handleBlingApiError } from "@/lib/bling-error-handler"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log("=== VERIFICANDO STATUS DO BANCO ===")
+    console.log("🔍 GET /api/db/status - Verificando status do banco...")
 
-    // Testar conexão básica
-    const connectionTest = await sql`SELECT NOW() as current_time`
+    // Teste básico de conexão
+    const connectionTest = await sql`SELECT NOW() as current_time, version() as db_version`
 
-    console.log("Conexão com banco OK:", connectionTest.rows[0])
-
-    // Verificar se tabela bling_tokens existe
-    const tableCheck = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'bling_tokens'
-      ) as table_exists
+    // Verificar tabelas existentes
+    const tablesCheck = await sql`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name LIKE 'bling_%'
+      ORDER BY table_name
     `
 
-    const tableExists = tableCheck.rows[0].table_exists
-
-    console.log("Tabela bling_tokens existe:", tableExists)
-
-    // Se tabela não existe, criar
-    if (!tableExists) {
-      console.log("Criando tabela bling_tokens...")
-
-      await sql`
-        CREATE TABLE IF NOT EXISTS bling_tokens (
-          id SERIAL PRIMARY KEY,
-          user_email VARCHAR(255) UNIQUE NOT NULL,
-          access_token TEXT NOT NULL,
-          refresh_token TEXT NOT NULL,
-          expires_at TIMESTAMP NOT NULL,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW()
-        )
-      `
-
-      console.log("Tabela bling_tokens criada com sucesso")
+    // Contar registros em cada tabela
+    const tableCounts = []
+    for (const table of tablesCheck.rows) {
+      try {
+        const countResult = await sql.query(`SELECT COUNT(*) as count FROM ${table.table_name}`)
+        tableCounts.push({
+          table: table.table_name,
+          count: Number.parseInt(countResult.rows[0].count),
+        })
+      } catch (error) {
+        tableCounts.push({
+          table: table.table_name,
+          count: 0,
+          error: "Erro ao contar registros",
+        })
+      }
     }
 
-    // Contar tokens
-    const tokenCount = await sql`SELECT COUNT(*) as count FROM bling_tokens`
-
-    console.log("Número de tokens no banco:", tokenCount.rows[0].count)
-
-    return NextResponse.json({
-      status: "success",
-      message: "Banco de dados funcionando",
-      database_status: "up",
-      table_exists: true,
-      token_count: Number.parseInt(tokenCount.rows[0].count),
+    const dbData = {
+      connection_ok: true,
       current_time: connectionTest.rows[0].current_time,
-      timestamp: new Date().toISOString(),
+      database_version: connectionTest.rows[0].db_version,
+      tables: tablesCheck.rows.map((row) => row.table_name),
+      table_counts: tableCounts,
+      required_tables: ["bling_auth_tokens", "bling_products", "bling_webhook_events", "bling_api_logs"],
+      missing_tables: ["bling_auth_tokens", "bling_products", "bling_webhook_events", "bling_api_logs"].filter(
+        (table) => !tablesCheck.rows.some((row) => row.table_name === table),
+      ),
+    }
+
+    console.log(`✅ Banco conectado: ${tablesCheck.rows.length} tabelas Bling encontradas`)
+
+    return NextResponse.json(createBlingApiResponse(true, dbData), {
+      headers: { "Content-Type": "application/json" },
     })
   } catch (error: any) {
-    console.error("Erro no status do banco:", error)
+    console.error("❌ Erro ao verificar status do banco:", error)
 
-    return NextResponse.json({
-      status: "error",
-      message: "Erro no banco de dados",
-      details: error.message,
-      database_status: "down",
-      timestamp: new Date().toISOString(),
+    const blingError = handleBlingApiError(error, "database-status")
+    return NextResponse.json(createBlingApiResponse(false, null, blingError), {
+      status: blingError.statusCode || 500,
+      headers: { "Content-Type": "application/json" },
     })
   }
 }

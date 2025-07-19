@@ -1,8 +1,8 @@
 export interface BlingError {
   code: string
   message: string
+  statusCode?: number
   details?: any
-  status?: number
 }
 
 export interface BlingApiResponse<T = any> {
@@ -10,179 +10,101 @@ export interface BlingApiResponse<T = any> {
   data?: T
   error?: BlingError
   meta?: {
-    elapsed_time: number
-    timestamp: string
     request_id?: string
+    elapsed_time?: number
+    timestamp: string
   }
 }
 
-export class BlingApiError extends Error {
-  public code: string
-  public status: number
-  public details?: any
-
-  constructor(message: string, code = "UNKNOWN_ERROR", status = 500, details?: any) {
-    super(message)
-    this.name = "BlingApiError"
-    this.code = code
-    this.status = status
-    this.details = details
+/**
+ * Constrói um objeto de resposta padronizado da API Bling.
+ */
+export function createBlingApiResponse<T>(
+  success: boolean,
+  data?: T,
+  error?: BlingError,
+  meta?: Partial<BlingApiResponse["meta"]>,
+): BlingApiResponse<T> {
+  return {
+    success,
+    data,
+    error,
+    meta: {
+      timestamp: new Date().toISOString(),
+      ...meta,
+    },
   }
 }
 
-export function handleBlingApiError(error: any, context = "API_CALL"): BlingApiResponse {
-  console.error(`❌ Erro no contexto ${context}:`, error)
+/**
+ * Converte qualquer erro capturado em um BlingError amigável.
+ */
+export function handleBlingApiError(error: any, context = "unknown"): BlingError {
+  /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+  console.error(`🚨 Bling API Error (${context}):`, error)
 
-  // Timeout errors
-  if (error.name === "AbortError") {
+  // Timeout ou abort
+  if (error.name === "AbortError" || error.code === "ABORT_ERR") {
     return {
-      success: false,
-      error: {
-        code: "TIMEOUT_ERROR",
-        message: "Operação cancelada por timeout",
-        status: 408,
-        details: { context, timeout: true },
-      },
+      code: "TIMEOUT",
+      message: "Timeout na requisição para a API do Bling",
+      statusCode: 408,
     }
   }
 
-  // Network errors
-  if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
-    return {
-      success: false,
-      error: {
-        code: "NETWORK_ERROR",
-        message: "Erro de conexão com a API do Bling",
-        status: 503,
-        details: { context, network_error: true },
-      },
-    }
-  }
-
-  // Bling API specific errors
-  if (error instanceof BlingApiError) {
-    return {
-      success: false,
-      error: {
-        code: error.code,
-        message: error.message,
-        status: error.status,
-        details: error.details,
-      },
-    }
-  }
-
-  // HTTP errors with response
+  // Resposta HTTP com erro
   if (error.response) {
     const status = error.response.status
-    let code = "HTTP_ERROR"
-    let message = `Erro HTTP ${status}`
-
-    switch (status) {
-      case 400:
-        code = "BAD_REQUEST"
-        message = "Requisição inválida"
-        break
-      case 401:
-        code = "UNAUTHORIZED"
-        message = "Token de acesso inválido ou expirado"
-        break
-      case 403:
-        code = "FORBIDDEN"
-        message = "Acesso negado"
-        break
-      case 404:
-        code = "NOT_FOUND"
-        message = "Recurso não encontrado"
-        break
-      case 422:
-        code = "VALIDATION_ERROR"
-        message = "Dados de entrada inválidos"
-        break
-      case 429:
-        code = "RATE_LIMIT"
-        message = "Limite de requisições excedido"
-        break
-      case 500:
-        code = "SERVER_ERROR"
-        message = "Erro interno do servidor Bling"
-        break
-    }
-
+    const data = error.response.data
     return {
-      success: false,
-      error: {
-        code,
-        message,
-        status,
-        details: {
-          context,
-          response_data: error.response.data,
-          headers: error.response.headers,
-        },
-      },
+      code: `HTTP_${status}`,
+      message: data?.error?.message ?? data?.message ?? `Erro HTTP ${status}`,
+      statusCode: status,
+      details: data,
     }
   }
 
-  // Generic errors
-  return {
-    success: false,
-    error: {
-      code: "INTERNAL_ERROR",
-      message: error.message || "Erro interno não identificado",
-      status: 500,
-      details: {
-        context,
-        error_type: error.constructor.name,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-      },
-    },
-  }
-}
-
-export function createBlingApiResponse<T>(data: T, elapsedTime: number, requestId?: string): BlingApiResponse<T> {
-  return {
-    success: true,
-    data,
-    meta: {
-      elapsed_time: elapsedTime,
-      timestamp: new Date().toISOString(),
-      request_id: requestId,
-    },
-  }
-}
-
-export function validateBlingResponse(response: any, expectedFields: string[] = []): boolean {
-  if (!response) {
-    throw new BlingApiError("Resposta vazia da API Bling", "EMPTY_RESPONSE", 502)
-  }
-
-  // Verificar se é um erro do Bling
-  if (response.error) {
-    throw new BlingApiError(
-      response.error.message || "Erro retornado pela API Bling",
-      response.error.code || "BLING_API_ERROR",
-      response.error.status || 400,
-      response.error,
-    )
-  }
-
-  // Verificar campos obrigatórios
-  for (const field of expectedFields) {
-    if (!(field in response)) {
-      throw new BlingApiError(`Campo obrigatório '${field}' não encontrado na resposta`, "MISSING_FIELD", 502, {
-        missing_field: field,
-        response,
-      })
+  // Erro de conexão
+  if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
+    return {
+      code: "CONNECTION_ERROR",
+      message: "Erro de conexão com a API do Bling",
+      statusCode: 503,
     }
   }
 
-  return true
+  // Erro de autenticação
+  if (error.message?.includes("token") || error.message?.includes("unauthorized")) {
+    return {
+      code: "AUTH_ERROR",
+      message: "Token de acesso inválido ou expirado",
+      statusCode: 401,
+    }
+  }
+
+  // Erro genérico
+  return {
+    code: "UNKNOWN_ERROR",
+    message: error.message ?? "Erro desconhecido na API do Bling",
+    statusCode: 500,
+    details: error,
+  }
+  /* eslint-enable @typescript-eslint/no-unsafe-member-access */
 }
 
-export function logBlingApiCall(method: string, url: string, status: number, elapsedTime: number, requestId?: string) {
-  const logLevel = status >= 400 ? "error" : status >= 300 ? "warn" : "info"
-  const emoji = status >= 400 ? "❌" : status >= 300 ? "⚠️" : "✅"
-
-  console.log(`${emoji} Bling API ${method} ${url} - ${status} (${elapsedTime}ms)${requestId ? ` [${requestId}]` : ""}`)
+/**
+ * Registra no console um resumo da chamada à API Bling.
+ */
+export function logBlingApiCall(
+  method: string,
+  endpoint: string,
+  statusCode: number,
+  durationMs: number,
+  requestId?: string,
+): void {
+  const ok = statusCode >= 200 && statusCode < 300
+  const emoji = ok ? "✅" : "❌"
+  console.log(
+    `${emoji} [${requestId ?? "no-id"}] ${method.toUpperCase()} ${endpoint} - ${statusCode} (${durationMs}ms)`,
+  )
 }

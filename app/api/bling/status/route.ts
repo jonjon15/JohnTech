@@ -1,76 +1,92 @@
-import { NextResponse } from "next/server"
-import { getValidAccessToken } from "@/lib/bling-auth"
+import { type NextRequest, NextResponse } from "next/server"
+import { sql } from "@vercel/postgres"
+import { createBlingApiResponse, handleBlingApiError } from "@/lib/bling-error-handler"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log("=== VERIFICANDO STATUS DO BLING ===")
+    console.log("🔍 GET /api/bling/status - Verificando status da API Bling...")
 
-    const userEmail = "admin@johntech.com"
+    // Verificar se há token válido
+    const tokenCheck = await sql`
+      SELECT access_token, expires_at, user_email
+      FROM bling_auth_tokens 
+      WHERE user_email = 'admin@johntech.com' 
+      AND expires_at > NOW()
+      LIMIT 1
+    `
 
-    // Verificar se temos token válido
-    const token = await getValidAccessToken(userEmail)
-
-    if (!token) {
-      return NextResponse.json({
-        status: "error",
-        message: "Token não encontrado",
-        details: "Faça a autenticação OAuth primeiro",
-        auth_required: true,
-      })
+    if (tokenCheck.rows.length === 0) {
+      return NextResponse.json(
+        createBlingApiResponse(false, null, {
+          code: "NO_VALID_TOKEN",
+          message: "Nenhum token válido encontrado. Faça a autenticação primeiro.",
+          statusCode: 401,
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      )
     }
 
-    // Testar conectividade com API do Bling
+    const token = tokenCheck.rows[0].access_token
+
+    // Testar conexão com a API do Bling
     const blingApiUrl = process.env.BLING_API_URL || "https://www.bling.com.br/Api/v3"
 
-    console.log("Testando conectividade com:", blingApiUrl)
-
-    const response = await fetch(`${blingApiUrl}/me`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "User-Agent": "BlingPro/1.0",
-      },
-      signal: AbortSignal.timeout(8000), // 8 segundos timeout
-    })
-
-    const responseText = await response.text()
-
-    console.log("Resposta do Bling:", {
-      status: response.status,
-      body: responseText.substring(0, 200),
-    })
-
-    if (!response.ok) {
-      return NextResponse.json({
-        status: "error",
-        message: "Erro na API do Bling",
-        details: {
-          status: response.status,
-          response: responseText,
+    try {
+      const response = await fetch(`${blingApiUrl}/produtos?limite=1`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
         },
-        bling_api_status: "down",
+        signal: AbortSignal.timeout(10000),
+      })
+
+      const responseData = await response.json()
+
+      const apiData = {
+        api_connected: response.ok,
+        status_code: response.status,
+        token_valid: response.status !== 401,
+        response_time: "< 10s",
+        api_url: blingApiUrl,
+        user_email: tokenCheck.rows[0].user_email,
+        token_expires_at: tokenCheck.rows[0].expires_at,
+        test_endpoint: "/produtos",
+        response_sample: response.ok ? responseData : null,
+        error_details: !response.ok ? responseData : null,
+      }
+
+      console.log(`✅ API Bling status: ${response.status} - ${response.ok ? "OK" : "Erro"}`)
+
+      return NextResponse.json(createBlingApiResponse(true, apiData), {
+        headers: { "Content-Type": "application/json" },
+      })
+    } catch (fetchError: any) {
+      const apiData = {
+        api_connected: false,
+        status_code: 0,
+        token_valid: true, // Token existe, mas API não responde
+        response_time: "timeout",
+        api_url: blingApiUrl,
+        user_email: tokenCheck.rows[0].user_email,
+        token_expires_at: tokenCheck.rows[0].expires_at,
+        test_endpoint: "/produtos",
+        error_details: fetchError.message,
+      }
+
+      return NextResponse.json(createBlingApiResponse(false, apiData, handleBlingApiError(fetchError, "bling-api")), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
       })
     }
-
-    const data = JSON.parse(responseText)
-
-    return NextResponse.json({
-      status: "success",
-      message: "Bling API funcionando",
-      bling_api_status: "up",
-      user_info: data.data || data,
-      timestamp: new Date().toISOString(),
-    })
   } catch (error: any) {
-    console.error("Erro no status do Bling:", error)
+    console.error("❌ Erro ao verificar status da API Bling:", error)
 
-    return NextResponse.json({
-      status: "error",
-      message: "Erro interno",
-      details: error.message,
-      bling_api_status: "unknown",
-      timestamp: new Date().toISOString(),
+    const blingError = handleBlingApiError(error, "bling-status")
+    return NextResponse.json(createBlingApiResponse(false, null, blingError), {
+      status: blingError.statusCode || 500,
+      headers: { "Content-Type": "application/json" },
     })
   }
 }
