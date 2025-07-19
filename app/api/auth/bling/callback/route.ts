@@ -94,11 +94,11 @@ async function exchangeCodeForToken(code: string) {
       redirect_uri: REDIRECT_URI,
     })
 
-    console.log("Fazendo requisição para:", "https://www.bling.com.br/OAuth2/token")
+    console.log("Fazendo requisição para:", "https://www.bling.com.br/Api/v3/oauth/token")
     console.log("Body:", formData.toString())
     console.log("Authorization Header:", `Basic ${credentials}`) // Log the Authorization header
 
-    const response = await fetch("https://www.bling.com.br/OAuth2/token", {
+    const response = await fetch("https://www.bling.com.br/Api/v3/oauth/authorize", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
