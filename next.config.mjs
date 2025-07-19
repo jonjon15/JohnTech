@@ -1,20 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
   experimental: {
-    serverComponentsExternalPackages: ['pg']
-  },
-  env: {
-    CUSTOM_KEY: 'my-value',
-  },
-  images: {
-    domains: ['localhost', 'vercel.app'],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
-    unoptimized: true,
+    serverActions: true,
+    serverComponentsExternalPackages: ["pg"], // Adicione 'pg' aqui para Server Components
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -22,53 +12,26 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  async headers() {
-    return [
+  images: {
+    remotePatterns: [
       {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, PUT, DELETE, OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
-        ],
+        protocol: "https",
+        hostname: "www.bling.com.br",
       },
-    ]
-  },
-  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
-    // Configurações personalizadas do webpack
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      net: false,
-      tls: false,
-    }
-
-    return config
-  },
-  // Configurações de build
-  output: 'standalone',
-  poweredByHeader: false,
-  compress: true,
-
-  // Configurações de redirecionamento
-  async redirects() {
-    return [
       {
-        source: '/home',
-        destination: '/',
-        permanent: true,
+        protocol: "https",
+        hostname: "via.placeholder.com",
       },
-    ]
-  },
-
-  // Configurações de rewrite
-  async rewrites() {
-    return [
       {
-        source: '/api/v1/:path*',
-        destination: '/api/:path*',
+        protocol: "https",
+        hostname: "placehold.co",
       },
-    ]
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+    ],
+    unoptimized: true,
   },
 }
 

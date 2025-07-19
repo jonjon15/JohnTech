@@ -8,9 +8,13 @@ import { getBlingAuthUrl } from "@/lib/bling-auth"
 export async function GET() {
   try {
     const authUrl = getBlingAuthUrl()
+    console.log("🔗 Redirecionando para URL de autorização do Bling:", authUrl)
     return NextResponse.redirect(authUrl)
   } catch (error) {
-    console.error("Erro ao gerar URL de autenticação do Bling:", error)
-    return NextResponse.json({ success: false, message: "Erro ao iniciar autenticação do Bling." }, { status: 500 })
+    console.error("❌ Erro ao gerar URL de autorização do Bling:", error)
+    return NextResponse.json(
+      { error: "Failed to generate Bling authorization URL", details: (error as Error).message },
+      { status: 500 },
+    )
   }
 }

@@ -5,10 +5,10 @@
 
 // Produto
 export interface BlingProduct {
-  id?: number
+  id: number
   nome: string
-  codigo?: string
-  preco?: number
+  codigo: string
+  preco: number
   tipo?: "P" | "S" // P=Produto, S=Serviço
   situacao?: "A" | "I" // A=Ativo, I=Inativo
   formato?: "S" | "V" | "U" // S=Simples, V=Variação, U=Unidade
@@ -76,15 +76,13 @@ export interface BlingCategory {
 
 // Estoque
 export interface BlingStock {
-  produto: {
-    id: number
-  }
-  deposito: {
-    id: number
-  }
-  saldoVirtualTotal: number
-  saldoFisicoTotal: number
-  saldoVirtualDisponivel: number
+  id: number
+  produtoId: number
+  depositoId: number
+  quantidade: number
+  saldoVirtualTotal?: number
+  saldoFisicoTotal?: number
+  saldoVirtualDisponivel?: number
 }
 
 export interface StockUpdate {
@@ -103,8 +101,8 @@ export interface StockUpdate {
 
 // Pedido
 export interface BlingOrder {
-  id?: number
-  numero?: number
+  id: number
+  numero: string
   numeroLoja?: string
   data: string
   dataSaida?: string
@@ -221,3 +219,52 @@ export interface BlingContact {
 export interface CreateProductRequest extends Omit<BlingProduct, "id"> {}
 export interface UpdateProductRequest extends Partial<Omit<BlingProduct, "id">> {}
 export interface CreateOrderRequest extends Omit<BlingOrder, "id" | "numero"> {}
+
+// Token Data
+export interface BlingTokenData {
+  accessToken: string
+  refreshToken: string
+  expiresIn: number
+  tokenType: string
+  scope: string
+  expiresAt: string // Adicionado para armazenar a data de expiração calculada
+}
+
+export interface StoredToken {
+  user_email: string
+  access_token: string
+  refresh_token: string
+  expires_at: Date
+  created_at: Date
+  updated_at: Date
+}
+
+// API Error
+export interface BlingApiError {
+  code: string
+  message: string
+  details?: any
+  statusCode: number
+}
+
+// API Response
+export interface BlingApiResponse<T> {
+  success: boolean
+  data: T | null
+  error: BlingApiError | null
+}
+
+// Webhooks Bling
+export interface BlingWebhookEvent {
+  evento: {
+    tipo: string // Ex: "vendas", "estoque"
+    data: string // Data e hora do evento
+  }
+  retorno: {
+    id: number // ID do recurso (ex: ID da venda, ID do produto)
+    // Outros dados específicos do recurso
+    [key: string]: any
+  }
+  // Outros campos do webhook
+  [key: string]: any
+}

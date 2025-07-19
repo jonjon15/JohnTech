@@ -1,13 +1,32 @@
 import { Pool } from "pg"
 
-// Configuração do Pool de Conexões com o Vercel Postgres
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL, // <-- Aqui a variável é utilizada
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-})
+// Variável global para armazenar o pool de conexões
+let pool: Pool | null = null
+
+/**
+ * Retorna uma instância do pool de conexões do PostgreSQL.
+ * Garante que apenas uma instância do pool seja criada (singleton pattern).
+ */
+export function getPool(): Pool {
+  if (!pool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL não está definida nas variáveis de ambiente.")
+    }
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+      max: 20, // Número máximo de clientes ociosos no pool
+      idleTimeoutMillis: 30000, // Tempo máximo que um cliente pode ficar ocioso antes de ser removido
+      connectionTimeoutMillis: 2000, // Tempo máximo para adquirir uma conexão
+    })
+
+    // Adiciona um listener para erros no pool
+    pool.on("error", (err) => {
+      console.error("❌ Erro inesperado no pool de conexões do PostgreSQL:", err)
+    })
+  }
+  return pool
+}
 
 // Interfaces
 export interface Product {
@@ -61,6 +80,7 @@ export interface WebhookLog {
 
 // Funções para produtos
 export async function getAllProducts(): Promise<Product[]> {
+  const pool = getPool()
   try {
     const result = await pool.query(`
       SELECT * FROM bling_products ORDER BY nome
@@ -73,6 +93,7 @@ export async function getAllProducts(): Promise<Product[]> {
 }
 
 export async function getProductById(id: number): Promise<Product | null> {
+  const pool = getPool()
   try {
     const result = await pool.query(
       `
@@ -93,6 +114,7 @@ export async function getProductById(id: number): Promise<Product | null> {
 }
 
 export async function getProductByBlingId(blingId: number): Promise<Product | null> {
+  const pool = getPool()
   try {
     const result = await pool.query(
       `
@@ -113,6 +135,7 @@ export async function getProductByBlingId(blingId: number): Promise<Product | nu
 }
 
 export async function createProduct(product: Omit<Product, "id" | "created_at" | "updated_at">): Promise<Product> {
+  const pool = getPool()
   try {
     const result = await pool.query(
       `
@@ -159,6 +182,7 @@ export async function createProduct(product: Omit<Product, "id" | "created_at" |
 }
 
 export async function updateProduct(id: number, product: Partial<Product>): Promise<Product | null> {
+  const pool = getPool()
   try {
     const fields = []
     const values = []
@@ -200,6 +224,7 @@ export async function updateProduct(id: number, product: Partial<Product>): Prom
 }
 
 export async function deleteProduct(id: number): Promise<boolean> {
+  const pool = getPool()
   try {
     const result = await pool.query(
       `
@@ -215,71 +240,9 @@ export async function deleteProduct(id: number): Promise<boolean> {
   }
 }
 
-// Funções para tokens
-export async function saveTokens(
-  userEmail: string,
-  accessToken: string,
-  refreshToken: string,
-  expiresIn: number,
-): Promise<void> {
-  try {
-    const expiresAt = new Date(Date.now() + expiresIn * 1000)
-
-    await pool.query(
-      `
-      INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (user_email)
-      DO UPDATE SET
-        access_token = EXCLUDED.access_token,
-        refresh_token = EXCLUDED.refresh_token,
-        expires_at = EXCLUDED.expires_at,
-        updated_at = NOW()
-    `,
-      [userEmail, accessToken, refreshToken, expiresAt],
-    )
-  } catch (error) {
-    console.error("Erro ao salvar tokens:", error)
-    throw error
-  }
-}
-
-export async function getTokens(userEmail: string): Promise<BlingToken | null> {
-  try {
-    const result = await pool.query(
-      `
-      SELECT * FROM bling_tokens WHERE user_email = $1
-    `,
-      [userEmail],
-    )
-
-    if (result.rows.length === 0) {
-      return null
-    }
-
-    return result.rows[0]
-  } catch (error) {
-    console.error("Erro ao buscar tokens:", error)
-    throw error
-  }
-}
-
-export async function deleteTokens(userEmail: string): Promise<void> {
-  try {
-    await pool.query(
-      `
-      DELETE FROM bling_tokens WHERE user_email = $1
-    `,
-      [userEmail],
-    )
-  } catch (error) {
-    console.error("Erro ao deletar tokens:", error)
-    throw error
-  }
-}
-
 // Funções para webhooks
 export async function logWebhook(eventType: string, resourceId: string, data: any): Promise<void> {
+  const pool = getPool()
   try {
     await pool.query(
       `
@@ -295,6 +258,7 @@ export async function logWebhook(eventType: string, resourceId: string, data: an
 }
 
 export async function getWebhookLogs(limit = 50): Promise<WebhookLog[]> {
+  const pool = getPool()
   try {
     const result = await pool.query(
       `
@@ -314,6 +278,7 @@ export async function getWebhookLogs(limit = 50): Promise<WebhookLog[]> {
 
 // Funções de utilidade
 export async function testConnection(): Promise<{ success: boolean; timestamp?: Date; error?: string }> {
+  const pool = getPool()
   try {
     const client = await pool.connect()
     const result = await client.query("SELECT NOW()")
@@ -326,6 +291,7 @@ export async function testConnection(): Promise<{ success: boolean; timestamp?: 
 }
 
 export async function queryWithRetry(text: string, params?: any[], maxRetries = 3) {
+  const pool = getPool()
   let lastError: Error | null = null
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -347,7 +313,7 @@ export async function queryWithRetry(text: string, params?: any[], maxRetries = 
 }
 
 export async function withTransaction<T>(callback: (client: any) => Promise<T>): Promise<T> {
-  const client = await pool.connect()
+  const client = await getPool().connect()
 
   try {
     await client.query("BEGIN")
@@ -363,6 +329,7 @@ export async function withTransaction<T>(callback: (client: any) => Promise<T>):
 }
 
 export async function initializeTables(): Promise<void> {
+  const pool = getPool()
   try {
     // Criar tabelas se não existirem
     await pool.query(`
@@ -433,10 +400,7 @@ function normalizeProduct(row: any): Product {
   }
 }
 
-export default pool // Garante a exportação padrão do pool
-
 // Aliases exigidos pelo deploy (Vercel build)
 export { logWebhook as createWebhookLog }
 export { testConnection as checkDatabaseConnection }
 export { initializeTables as createTablesIfNotExists }
-export { getTokens as getBlingTokens }
