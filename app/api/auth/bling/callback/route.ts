@@ -98,7 +98,7 @@ async function exchangeCodeForToken(code: string) {
     console.log("Body:", formData.toString())
     console.log("Authorization Header:", `Basic ${credentials}`) // Log the Authorization header
 
-    const response = await fetch("https://www.bling.com.br/Api/v3/oauth/authorize", {
+    const response = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
