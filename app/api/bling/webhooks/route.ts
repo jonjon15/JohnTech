@@ -1,121 +1,82 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createHmac } from "crypto"
+import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("=== WEBHOOK RECEBIDO ===")
+
     const body = await request.text()
     const signature = request.headers.get("x-bling-signature")
 
-    // Validar assinatura do webhook (segurança)
-    if (!validateWebhookSignature(body, signature)) {
-      console.error("Assinatura do webhook inválida")
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    console.log("Signature recebida:", signature)
+    console.log("Body:", body.substring(0, 200) + "...")
+
+    // Verificar assinatura do webhook
+    if (signature && process.env.BLING_WEBHOOK_SECRET) {
+      const expectedSignature = crypto.createHmac("sha256", process.env.BLING_WEBHOOK_SECRET).update(body).digest("hex")
+
+      if (signature !== expectedSignature) {
+        console.error("Assinatura inválida do webhook")
+        return NextResponse.json({ error: "Assinatura inválida" }, { status: 401 })
+      }
     }
 
-    const webhookData = JSON.parse(body)
-    console.log("Webhook recebido:", webhookData)
+    let webhookData
+    try {
+      webhookData = JSON.parse(body)
+    } catch (error) {
+      console.error("Erro ao fazer parse do webhook:", error)
+      return NextResponse.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-    // Processar webhook baseado no tipo de evento
-    await processWebhookEvent(webhookData)
+    console.log("Dados do webhook:", JSON.stringify(webhookData, null, 2))
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
+    // Processar diferentes tipos de webhook
+    const { event, data } = webhookData
+
+    switch (event) {
+      case "produto.criado":
+        console.log("Produto criado:", data.id)
+        break
+      case "produto.atualizado":
+        console.log("Produto atualizado:", data.id)
+        break
+      case "produto.excluido":
+        console.log("Produto excluído:", data.id)
+        break
+      case "estoque.alterado":
+        console.log("Estoque alterado:", data)
+        break
+      default:
+        console.log("Evento não reconhecido:", event)
+    }
+
+    // Aqui você processaria o webhook conforme sua lógica de negócio
+    // Por exemplo, atualizar banco de dados local, sincronizar dados, etc.
+
+    return NextResponse.json({
+      success: true,
+      message: "Webhook processado com sucesso",
+      event: event,
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error: any) {
     console.error("Erro ao processar webhook:", error)
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Erro interno ao processar webhook",
+        message: error.message,
+      },
+      { status: 500 },
+    )
   }
 }
 
-function validateWebhookSignature(body: string, signature: string | null): boolean {
-  if (!signature) return false
-
-  const webhookSecret = process.env.BLING_WEBHOOK_SECRET
-  if (!webhookSecret) {
-    console.warn("BLING_WEBHOOK_SECRET não configurado")
-    return true // Em desenvolvimento, pode pular validação
-  }
-
-  const expectedSignature = createHmac("sha256", webhookSecret).update(body).digest("hex")
-
-  return signature === `sha256=${expectedSignature}`
-}
-
-async function processWebhookEvent(data: any) {
-  const { evento, dados, ocorrencia } = data
-
-  switch (evento) {
-    case "produto.criado":
-      await handleProdutoCriado(dados)
-      break
-
-    case "produto.alterado":
-      await handleProdutoAlterado(dados)
-      break
-
-    case "produto.excluido":
-      await handleProdutoExcluido(dados)
-      break
-
-    case "estoque.alterado":
-      await handleEstoqueAlterado(dados)
-      break
-
-    case "pedido.criado":
-      await handlePedidoCriado(dados)
-      break
-
-    case "pedido.alterado":
-      await handlePedidoAlterado(dados)
-      break
-
-    case "nfe.autorizada":
-      await handleNfeAutorizada(dados)
-      break
-
-    case "nfe.cancelada":
-      await handleNfeCancelada(dados)
-      break
-
-    default:
-      console.log(`Evento não tratado: ${evento}`)
-  }
-}
-
-async function handleProdutoCriado(dados: any) {
-  console.log("Produto criado:", dados)
-  // Implementar lógica para sincronizar produto criado
-}
-
-async function handleProdutoAlterado(dados: any) {
-  console.log("Produto alterado:", dados)
-  // Implementar lógica para sincronizar alterações do produto
-}
-
-async function handleProdutoExcluido(dados: any) {
-  console.log("Produto excluído:", dados)
-  // Implementar lógica para remover produto do sistema local
-}
-
-async function handleEstoqueAlterado(dados: any) {
-  console.log("Estoque alterado:", dados)
-  // Implementar lógica para sincronizar alterações de estoque
-}
-
-async function handlePedidoCriado(dados: any) {
-  console.log("Pedido criado:", dados)
-  // Implementar lógica para processar novo pedido
-}
-
-async function handlePedidoAlterado(dados: any) {
-  console.log("Pedido alterado:", dados)
-  // Implementar lógica para sincronizar alterações do pedido
-}
-
-async function handleNfeAutorizada(dados: any) {
-  console.log("NFe autorizada:", dados)
-  // Implementar lógica para processar NFe autorizada
-}
-
-async function handleNfeCancelada(dados: any) {
-  console.log("NFe cancelada:", dados)
-  // Implementar lógica para processar NFe cancelada
+export async function GET() {
+  return NextResponse.json({
+    message: "Endpoint de webhooks do Bling",
+    url: `${process.env.NEXT_PUBLIC_BASE_URL}/api/bling/webhooks`,
+    methods: ["POST"],
+    events: ["produto.criado", "produto.atualizado", "produto.excluido", "estoque.alterado"],
+  })
 }
