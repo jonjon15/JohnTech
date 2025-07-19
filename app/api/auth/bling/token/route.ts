@@ -1,131 +1,69 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 
-const BLING_CLIENT_ID = process.env.BLING_CLIENT_ID || "44866dbd8fe131077d73dbe3d60531016512c855"
-const BLING_CLIENT_SECRET =
-  process.env.BLING_CLIENT_SECRET || "18176f2b734f4abced1893fe39a852b6f28ff53c2a564348ebfe960367d1"
-const BLING_TOKEN_URL = "https://www.bling.com.br/Api/v3/oauth/token"
-
 export async function POST(request: NextRequest) {
   try {
-    const { code } = await request.json()
+    const { code, state } = await request.json()
 
     if (!code) {
-      console.error("No authorization code provided")
-      return NextResponse.json({ error: "Authorization code is required" }, { status: 400 })
+      return NextResponse.json({ error: "Código de autorização não fornecido" }, { status: 400 })
     }
 
-    const redirectUri = "https://johntech.vercel.app/auth/callback"
+    // Verificar se as variáveis de ambiente estão configuradas
+    if (!process.env.BLING_CLIENT_ID || !process.env.BLING_CLIENT_SECRET) {
+      console.error("Variáveis de ambiente do Bling não configuradas")
+      return NextResponse.json({ error: "Configuração do Bling incompleta" }, { status: 500 })
+    }
 
-    console.log("=== TOKEN EXCHANGE DEBUG ===")
-    console.log("Code:", code)
-    console.log("Redirect URI:", redirectUri)
-    console.log("Client ID (from env):", BLING_CLIENT_ID ? "Set" : "Not Set")
-    console.log("Client Secret (from env):", BLING_CLIENT_SECRET ? "Set" : "Not Set")
-
-    const formData = new URLSearchParams({
-      grant_type: "authorization_code",
-      code: code,
-      redirect_uri: redirectUri,
-    })
-
-    const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
-
-    console.log("Form data:", formData.toString())
-    console.log("Authorization Header (Basic):", `Basic ${credentials.substring(0, 10)}...`)
-
-    const tokenResponse = await fetch(BLING_TOKEN_URL, {
+    // Trocar código por token
+    const tokenResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
-        "User-Agent": "BlingPro/1.0",
-        Authorization: `Basic ${credentials}`,
       },
-      body: formData,
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code,
+        client_id: process.env.BLING_CLIENT_ID,
+        client_secret: process.env.BLING_CLIENT_SECRET,
+      }),
     })
 
-    const tokenData = await tokenResponse.json()
-
-    console.log("=== BLING RESPONSE ===")
-    console.log("Status:", tokenResponse.status)
-    console.log("Headers:", Object.fromEntries(tokenResponse.headers.entries()))
-    console.log("Data:", tokenData)
-
     if (!tokenResponse.ok) {
-      console.error("Bling token error:", {
-        status: tokenResponse.status,
-        statusText: tokenResponse.statusText,
-        data: tokenData,
-      })
-
+      const errorText = await tokenResponse.text()
+      console.error("Erro ao obter token do Bling:", tokenResponse.status, errorText)
       return NextResponse.json(
-        {
-          error: tokenData.error_description || tokenData.error || "Failed to obtain access token",
-          details: {
-            status: tokenResponse.status,
-            bling_error: tokenData,
-          },
-        },
-        { status: 400 },
+        { error: "Falha na autenticação com Bling", details: errorText },
+        { status: tokenResponse.status },
       )
     }
 
-    console.log("=== SUCCESS ===")
-    console.log("Token obtained successfully")
+    const tokenData = await tokenResponse.json()
+    console.log("Token obtido com sucesso:", { expires_in: tokenData.expires_in })
 
-    // Armazenar tokens no banco de dados
-    const { access_token, refresh_token, expires_in } = tokenData
-    const expiresAt = new Date(Date.now() + expires_in * 1000)
+    // Salvar token no banco
+    const userEmail = "admin@example.com" // Em produção, pegar do usuário logado
+    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
 
-    try {
-      await sql`
-        INSERT INTO users (
-          email, 
-          name, 
-          bling_access_token, 
-          bling_refresh_token, 
-          bling_token_expires_at,
-          created_at,
-          updated_at
-        ) VALUES (
-          'admin@johntech.com', 
-          'Admin JohnTech', 
-          ${access_token}, 
-          ${refresh_token}, 
-          ${expiresAt.toISOString()},
-          NOW(),
-          NOW()
-        )
-        ON CONFLICT (email) 
-        DO UPDATE SET 
-          bling_access_token = EXCLUDED.bling_access_token,
-          bling_refresh_token = EXCLUDED.bling_refresh_token,
-          bling_token_expires_at = EXCLUDED.bling_token_expires_at,
-          updated_at = NOW()
-      `
-      console.log("Tokens Bling salvos no banco de dados para admin@johntech.com")
-    } catch (dbError) {
-      console.error("Erro ao salvar tokens no banco de dados:", dbError)
-      // Continue mesmo com erro de DB para não quebrar o fluxo
-    }
+    await sql`
+      INSERT INTO bling_tokens (user_email, access_token, refresh_token, expires_at, created_at, updated_at)
+      VALUES (${userEmail}, ${tokenData.access_token}, ${tokenData.refresh_token}, ${expiresAt}, NOW(), NOW())
+      ON CONFLICT (user_email) 
+      DO UPDATE SET 
+        access_token = ${tokenData.access_token},
+        refresh_token = ${tokenData.refresh_token},
+        expires_at = ${expiresAt},
+        updated_at = NOW()
+    `
 
     return NextResponse.json({
       success: true,
-      message: "Successfully authenticated with Bling",
-      expires_in: tokenData.expires_in,
-      token_type: tokenData.token_type,
+      message: "Token salvo com sucesso",
+      expires_at: expiresAt,
     })
-  } catch (error) {
-    console.error("=== CRITICAL ERROR ===")
-    console.error("Token exchange error:", error)
-
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+  } catch (error: any) {
+    console.error("Erro interno ao processar token:", error)
+    return NextResponse.json({ error: "Erro interno do servidor", message: error.message }, { status: 500 })
   }
 }

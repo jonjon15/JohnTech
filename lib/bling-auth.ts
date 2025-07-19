@@ -1,94 +1,92 @@
-import { sql } from "@/lib/db"
+import { sql } from "@vercel/postgres"
 
-const BLING_CLIENT_ID = process.env.BLING_CLIENT_ID!
-const BLING_CLIENT_SECRET = process.env.BLING_CLIENT_SECRET!
-const BLING_TOKEN_URL = "https://www.bling.com.br/Api/v3/oauth/token"
-
-/**
- * Dados de autenticação recuperados do banco.
- */
-interface TokenRow {
-  bling_access_token: string | null
-  bling_refresh_token: string | null
-  bling_token_expires_at: Date | null
+interface BlingToken {
+  access_token: string
+  refresh_token: string
+  expires_at: Date
 }
 
-/**
- * Devolve sempre um access token válido para o e-mail informado.
- * Faz refresh se:
- *  • não existir access token,
- *  • estiver expirado,
- *  • ou se for solicitado explicitamente (ex.: resposta 401).
- */
 export async function getValidAccessToken(userEmail: string, forceRefresh = false): Promise<string | null> {
-  // 1. Lê tokens do banco
-  const [row] = await sql<TokenRow[]>`
-    SELECT bling_access_token, bling_refresh_token, bling_token_expires_at
-    FROM users
-    WHERE email = ${userEmail}
-    LIMIT 1
-  `
+  try {
+    // Buscar token atual
+    const result = await sql`
+      SELECT access_token, refresh_token, expires_at 
+      FROM bling_tokens 
+      WHERE user_email = ${userEmail}
+    `
 
-  if (!row) {
-    console.error("getValidAccessToken: usuário não encontrado:", userEmail)
-    return null
-  }
-
-  const { bling_access_token, bling_refresh_token, bling_token_expires_at } = row
-  const isExpired =
-    !bling_access_token || !bling_token_expires_at || new Date(bling_token_expires_at).getTime() < Date.now() + 60_000 // 1 min de folga
-
-  if ((isExpired || forceRefresh) && bling_refresh_token) {
-    console.log("getValidAccessToken: fazendo refresh do token…")
-
-    try {
-      const form = new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: bling_refresh_token,
-      })
-
-      const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64")
-
-      const res = await fetch(BLING_TOKEN_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-          Authorization: `Basic ${credentials}`,
-        },
-        body: form,
-      })
-
-      if (!res.ok) {
-        console.error("Falha ao renovar token:", res.status, await res.text())
-        return null
-      }
-
-      const data: {
-        access_token: string
-        refresh_token: string
-        expires_in: number
-      } = await res.json()
-
-      const newExpires = new Date(Date.now() + data.expires_in * 1000)
-
-      // Salva no banco
-      await sql`
-        UPDATE users
-        SET
-          bling_access_token = ${data.access_token},
-          bling_refresh_token = ${data.refresh_token},
-          bling_token_expires_at = ${newExpires.toISOString()}
-        WHERE email = ${userEmail}
-      `
-
-      console.log("Token renovado com sucesso — novo vencimento:", newExpires.toISOString())
-      return data.access_token
-    } catch (err) {
-      console.error("Erro inesperado durante refresh:", err)
+    if (result.rows.length === 0) {
+      console.log("Nenhum token encontrado para o usuário:", userEmail)
       return null
     }
-  }
 
-  return bling_access_token
+    const token = result.rows[0] as BlingToken
+    const now = new Date()
+    const expiresAt = new Date(token.expires_at)
+
+    // Se o token ainda é válido e não é refresh forçado
+    if (!forceRefresh && expiresAt > now) {
+      return token.access_token
+    }
+
+    // Token expirado ou refresh forçado - tentar renovar
+    console.log("Token expirado ou refresh forçado. Renovando...")
+    return await refreshAccessToken(userEmail, token.refresh_token)
+  } catch (error) {
+    console.error("Erro ao obter token válido:", error)
+    return null
+  }
+}
+
+async function refreshAccessToken(userEmail: string, refreshToken: string): Promise<string | null> {
+  try {
+    const response = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: process.env.BLING_CLIENT_ID!,
+        client_secret: process.env.BLING_CLIENT_SECRET!,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Erro ao renovar token:", response.status, errorText)
+      return null
+    }
+
+    const tokenData = await response.json()
+    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
+
+    // Atualizar token no banco
+    await sql`
+      UPDATE bling_tokens 
+      SET access_token = ${tokenData.access_token},
+          refresh_token = ${tokenData.refresh_token || refreshToken},
+          expires_at = ${expiresAt},
+          updated_at = NOW()
+      WHERE user_email = ${userEmail}
+    `
+
+    console.log("Token renovado com sucesso")
+    return tokenData.access_token
+  } catch (error) {
+    console.error("Erro ao renovar token:", error)
+    return null
+  }
+}
+
+export async function revokeToken(userEmail: string): Promise<boolean> {
+  try {
+    await sql`DELETE FROM bling_tokens WHERE user_email = ${userEmail}`
+    return true
+  } catch (error) {
+    console.error("Erro ao revogar token:", error)
+    return false
+  }
 }
