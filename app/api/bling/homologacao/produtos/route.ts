@@ -1,3 +1,7 @@
+// Handler GET básico para evitar erro 405
+export async function GET(req: NextRequest) {
+  return NextResponse.json({ message: "GET disponível!" })
+}
 export const runtime = "nodejs"
 
 import { type NextRequest, NextResponse } from "next/server"

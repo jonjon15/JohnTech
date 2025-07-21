@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js",
     "build": "next build",
     "start": "next start",
     "vercel-build": "next build"
@@ -45,6 +45,7 @@
     "cmdk": "latest",
     "crypto": "latest",
     "date-fns": "4.1.0",
+    "devcert": "^1.2.2",
     "embla-carousel-react": "latest",
     "framer-motion": "^12.23.6",
     "fs": "latest",

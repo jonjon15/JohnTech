@@ -3,7 +3,7 @@ const nextConfig = {
   serverExternalPackages: ['@vercel/postgres'],
   experimental: {
     serverActions: {
-      allowedOrigins: ['localhost:3000', 'johntech.vercel.app'],
+      allowedOrigins: ['johntech.vercel.app'],
     },
   },
   env: {

@@ -1,5 +1,9 @@
+
 import { type NextRequest, NextResponse } from "next/server"
 import { createHmac } from "crypto"
+
+// Armazenamento simples em memória para logs de webhooks recebidos
+let webhookLogs: any[] = []
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +19,15 @@ export async function POST(request: NextRequest) {
     const webhookData = JSON.parse(body)
     console.log("Webhook recebido:", webhookData)
 
+    // Salva log do webhook recebido
+    webhookLogs.unshift({
+      receivedAt: new Date().toISOString(),
+      evento: webhookData.evento,
+      dados: webhookData.dados,
+      raw: webhookData,
+    })
+    webhookLogs = webhookLogs.slice(0, 50) // Limita a 50 logs
+
     // Processar webhook baseado no tipo de evento
     await processWebhookEvent(webhookData)
 
@@ -23,6 +36,11 @@ export async function POST(request: NextRequest) {
     console.error("Erro ao processar webhook:", error)
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 })
   }
+}
+
+// Endpoint GET para consultar os últimos webhooks recebidos
+export async function GET() {
+  return NextResponse.json({ logs: webhookLogs })
 }
 
 function validateWebhookSignature(body: string, signature: string | null): boolean {
