@@ -4,13 +4,12 @@ import React, { useEffect, useRef } from 'react';
 // SVG do mini mouse igual ao print
 const MiniMouseSVG = () => (
   <svg className="cursor-svg" width="28" height="38" viewBox="0 0 28 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Oval branco com glow */}
+    {/* Oval branco com glow e sem transparência */}
     <ellipse
       cx="14" cy="19" rx="11" ry="17"
-      fill="none"
-      stroke="white"
-      strokeWidth="2.5"
-      filter="url(#glow)"
+      fill="#181c2b"
+      stroke="none"
+      filter="url(#glow-neon)"
     />
     {/* Dois pontos animados na ponta superior para simular scroll real */}
     <circle cx="14" r="1.2" fill="white">
@@ -24,12 +23,10 @@ const MiniMouseSVG = () => (
     {/* Traço central encostando no ponto animado */}
     <rect x="13.1" y="12" width="1.8" height="5" rx="0.9" fill="white" />
     <defs>
-      <filter id="glow" x="-8" y="-8" width="44" height="54" filterUnits="userSpaceOnUse">
-        <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
-        <feMerge>
-          <feMergeNode in="coloredBlur" />
-          <feMergeNode in="SourceGraphic" />
-        </feMerge>
+      <filter id="glow-neon" x="-6" y="-6" width="40" height="50" filterUnits="userSpaceOnUse">
+        <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#fffbe6" flood-opacity="0.7" />
+        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#fffbe6" flood-opacity="0.45" />
+        <feDropShadow dx="0" dy="0" stdDeviation="1" flood-color="#fffbe6" flood-opacity="1.5" />
       </filter>
     </defs>
   </svg>
