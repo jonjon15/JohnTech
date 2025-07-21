@@ -46,6 +46,7 @@
     "crypto": "latest",
     "date-fns": "4.1.0",
     "embla-carousel-react": "latest",
+    "framer-motion": "^12.23.6",
     "fs": "latest",
     "https": "latest",
     "input-otp": "latest",

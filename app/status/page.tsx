@@ -102,7 +102,7 @@ export default function StatusPage() {
           <div>
             <h1 className={`text-3xl font-bold ${isWakanda ? "text-green-100" : "text-white"}`}>Status do Sistema</h1>
             <p className={`${isWakanda ? "text-green-100/70" : "text-white/70"} mt-2`}>
-              Monitoramento em tempo real dos serviços BlingPro
+              Monitoramento em tempo real dos serviços JohnTech
             </p>
           </div>
           <Button

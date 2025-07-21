@@ -247,7 +247,7 @@ export default function HomePage() {
           <div
             className={`border-t mt-12 pt-8 text-center ${isWakanda ? "border-green-500/20 text-green-100/60" : "border-white/10 text-white/60"}`}
           >
-            <p>&copy; 2025 BlingPro. Todos os direitos reservados.</p>
+            <p>&copy; 2025 JohnTech. Todos os direitos reservados.</p>
           </div>
         </div>
       </footer>

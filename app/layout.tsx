@@ -7,9 +7,10 @@ import MainHeader from "@/components/main-header" // Corrigido para importação
 import { FlyingParticles } from "@/components/flying-particles" // Importa o novo componente
 
 const inter = Inter({ subsets: ["latin"] })
+import CustomCursor from "../components/CustomCursor";
 
 export const metadata: Metadata = {
-  title: "BlingPro - Premium Inventory Management",
+  title: "JohnTech - Premium Inventory Management",
   description: "Advanced inventory management with Bling ERP integration",
     generator: 'v0.dev'
 }
@@ -26,6 +27,7 @@ export default function RootLayout({
           <MainHeader />
           {/* Adiciona um contêiner relativo para as partículas e o conteúdo */}
           <div className="relative min-h-screen">
+            <CustomCursor />
             <FlyingParticles /> {/* Coloca as partículas aqui */}
             {children}
           </div>

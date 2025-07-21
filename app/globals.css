@@ -74,6 +74,40 @@
 }
 
 @layer base {
+/* Cursor customizado */
+.custom-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 38px;
+  pointer-events: none;
+  z-index: 99999;
+  mix-blend-mode: lighten;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  will-change: transform;
+  opacity: 1;
+}
+
+.custom-cursor .cursor-svg {
+  width: 28px;
+  height: 38px;
+  display: block;
+}
+
+.custom-cursor.cursor-hover {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 8px #00fff0cc);
+  transition: filter 0.15s;
+}
+
+.custom-cursor.cursor-click {
+  filter: drop-shadow(0 0 16px #4f3fffcc);
+  transition: filter 0.15s;
+}
   * {
     @apply border-border;
   }
