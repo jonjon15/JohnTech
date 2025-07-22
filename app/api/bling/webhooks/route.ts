@@ -112,6 +112,7 @@ async function handleProdutoCriado(dados: any) {
       tipo: dados.tipo ?? "P",
       formato: dados.formato ?? "S",
       bling_id: dados.bling_id ?? null,
+      estoque: dados.estoque ?? null,
     })
     console.log("Produto criado via webhook:", dados)
   } catch (e) {
