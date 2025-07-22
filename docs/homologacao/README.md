@@ -1,3 +1,4 @@
+
 # 🎯 Guia de Homologação Bling
 
 Este documento detalha a integração do sistema de gestão de produtos JohnTech com o Bling ERP, incluindo requisitos, escopos, endpoints, validações e exemplos reais do projeto.
@@ -8,9 +9,9 @@ Este documento detalha a integração do sistema de gestão de produtos JohnTech
 - **Nome**: JohnTech - Gestão de Produtos
 - **Categoria**: ERP / E-commerce
 - **Descrição**: API RESTful para cadastro, atualização, consulta e exclusão de produtos integrada ao Bling ERP.
-- **URL Homepage**: https://johntech.vercel.app
-- **URL Callback**: https://johntech.vercel.app/auth/callback
-- **Logo**: ![Logo](../images/logo.png)
+- **URL Homepage**: [https://johntech.vercel.app](https://johntech.vercel.app)
+- **URL Callback**: [https://johntech.vercel.app/auth/callback](https://johntech.vercel.app/auth/callback)
+- **Logo**: ![Logo](https://johntech.vercel.app/docs/images/logo.png)
 
 ### **Escopos Solicitados**
 - produtos.read
@@ -43,9 +44,9 @@ Este documento detalha a integração do sistema de gestão de produtos JohnTech
 - Implementação pronta para homologação
 
 ## 📎 **Links Úteis**
-- [Documentação Técnica dos Endpoints](./endpoints.md)
-- [Exemplos de Uso](./examples.md)
-- [Códigos de Erro](./errors.md)
-- [Changelog](./changelog.md)
-- [OpenAPI/Swagger](../api/openapi.yaml)
-- [Collection Postman](../api/postman-collection.json)
+- [Documentação Técnica dos Endpoints](https://johntech.vercel.app/docs/homologacao/endpoints.md)
+- [Exemplos de Uso](https://johntech.vercel.app/docs/homologacao/examples.md)
+- [Códigos de Erro](https://johntech.vercel.app/docs/homologacao/errors.md)
+- [Changelog](https://johntech.vercel.app/docs/homologacao/changelog.md)
+- [OpenAPI/Swagger](https://johntech.vercel.app/docs/api/openapi.yaml)
+- [Collection Postman](https://johntech.vercel.app/docs/api/postman-collection.json)

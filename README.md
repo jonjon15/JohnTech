@@ -1,6 +1,9 @@
+
 # 🛍️ JohnTech - Sistema de Gestão de Produtos
 
 API RESTful para cadastro, atualização, consulta e exclusão de produtos integrada ao Bling ERP.
+
+🔗 Acesse a aplicação: [https://johntech.vercel.app](https://johntech.vercel.app)
 
 ## 🚀 Status da Homologação
 - ✅ Implementação completa
@@ -23,13 +26,13 @@ API RESTful para cadastro, atualização, consulta e exclusão de produtos integ
 - Prisma (banco)
 
 ## 📖 Documentação
-- [Guia de Homologação](./docs/homologacao/README.md)
-- [Documentação Técnica dos Endpoints](./docs/homologacao/endpoints.md)
-- [Exemplos de Uso](./docs/homologacao/examples.md)
-- [Códigos de Erro](./docs/homologacao/errors.md)
-- [Changelog](./docs/homologacao/changelog.md)
-- [OpenAPI/Swagger](./docs/api/openapi.yaml)
-- [Collection Postman](./docs/api/postman-collection.json)
+- [Guia de Homologação](https://johntech.vercel.app/docs/homologacao/README.md)
+- [Documentação Técnica dos Endpoints](https://johntech.vercel.app/docs/homologacao/endpoints.md)
+- [Exemplos de Uso](https://johntech.vercel.app/docs/homologacao/examples.md)
+- [Códigos de Erro](https://johntech.vercel.app/docs/homologacao/errors.md)
+- [Changelog](https://johntech.vercel.app/docs/homologacao/changelog.md)
+- [OpenAPI/Swagger](https://johntech.vercel.app/docs/api/openapi.yaml)
+- [Collection Postman](https://johntech.vercel.app/docs/api/postman-collection.json)
 
 ## 🏃‍♂️ Instalação Rápida
 
@@ -52,7 +55,7 @@ pnpm dev
 
 ## 📞 Suporte
 - Email: contato@johntech.com.br
-- Docs: https://johntech.com.br/docs
+- Docs: https://johntech.vercel.app/docs
 - Issues: https://github.com/jonjon15/JohnTech/issues
 
 ---
