@@ -6,14 +6,30 @@ const devcert = require('devcert');
 const app = next({ dev: true });
 const handle = app.getRequestHandler();
 
+const HOST = process.env.HOST || 'localhost';
+const PORT = process.env.PORT || 3000;
+
 (async () => {
-  const ssl = await devcert.certificateFor('192.168.15.5');
   await app.prepare();
-  createServer(ssl, (req, res) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
-  }).listen(3000, err => {
-    if (err) throw err;
-    console.log('> Ready on http://192.168.15.5:3000');
-  });
+  if (HOST === 'localhost' || HOST === '127.0.0.1') {
+    // HTTPS para localhost
+    const ssl = await devcert.certificateFor('localhost');
+    createServer(ssl, (req, res) => {
+      const parsedUrl = parse(req.url, true);
+      handle(req, res, parsedUrl);
+    }).listen(PORT, err => {
+      if (err) throw err;
+      console.log(`> Ready on https://localhost:${PORT}`);
+    });
+  } else {
+    // HTTP para IP ou outros domínios
+    const http = require('http');
+    http.createServer((req, res) => {
+      const parsedUrl = parse(req.url, true);
+      handle(req, res, parsedUrl);
+    }).listen(PORT, HOST, err => {
+      if (err) throw err;
+      console.log(`> Ready on http://${HOST}:${PORT}`);
+    });
+  }
 })();

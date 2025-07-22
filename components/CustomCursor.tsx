@@ -24,9 +24,9 @@ const MiniMouseSVG = () => (
     <rect x="13.1" y="12" width="1.8" height="5" rx="0.9" fill="white" />
     <defs>
       <filter id="glow-neon" x="-6" y="-6" width="40" height="50" filterUnits="userSpaceOnUse">
-        <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#fffbe6" flood-opacity="0.7" />
-        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#fffbe6" flood-opacity="0.45" />
-        <feDropShadow dx="0" dy="0" stdDeviation="1" flood-color="#fffbe6" flood-opacity="1.5" />
+        <feDropShadow dx="0" dy="0" stdDeviation="1.2" floodColor="#fffbe6" floodOpacity="0.7" />
+        <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="#fffbe6" floodOpacity="0.45" />
+        <feDropShadow dx="0" dy="0" stdDeviation="1" floodColor="#fffbe6" floodOpacity="1.5" />
       </filter>
     </defs>
   </svg>

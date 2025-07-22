@@ -1,0 +1,114 @@
+openapi: 3.0.0
+info:
+  title: JohnTech - API Produtos Bling
+  description: API RESTful para cadastro, atualização, consulta e exclusão de produtos integrada ao Bling ERP.
+  version: 1.0.0
+  contact:
+    name: Suporte Técnico JohnTech
+    email: johnnypatente15@gmail.com
+    url: https://johntech.vercel.app
+servers:
+  - url: https://johntech.vercel.app/api/bling
+    description: Produção
+  - url: https://johntech.vercel.app/homologacao/api/bling
+    description: Homologação
+paths:
+  /produtos/{id}:
+    get:
+      summary: Buscar produto por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Produto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Produto'
+        '404':
+          description: Produto não encontrado
+    put:
+      summary: Atualizar produto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Produto'
+      responses:
+        '200':
+          description: Produto atualizado
+        '400':
+          description: Erro de validação
+        '404':
+          description: Produto não encontrado
+    delete:
+      summary: Remover produto
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Produto removido
+        '404':
+          description: Produto não encontrado
+  /produtos:
+    post:
+      summary: Criar produto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Produto'
+      responses:
+        '201':
+          description: Produto criado
+        '400':
+          description: Erro de validação
+components:
+  schemas:
+    Produto:
+      type: object
+      required:
+        - nome
+        - preco
+      properties:
+        id:
+          type: integer
+        nome:
+          type: string
+          maxLength: 120
+        preco:
+          type: number
+          minimum: 0
+        situacao:
+          type: string
+          enum: [A, I]
+        codigo:
+          type: string
+        descricao:
+          type: string
+        marca:
+          type: string
+        estoque:
+          type: integer
+        unidade:
+          type: string
+        ncm:
+          type: string
+        cest:
+          type: string

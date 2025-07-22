@@ -18,6 +18,7 @@ export interface BlingProduct {
   tipo: string
   formato: string
   bling_id: string | null
+  estoque: number | null
   created_at: string
   updated_at: string
 }
@@ -35,6 +36,7 @@ export async function ensureHomologacaoTables() {
       tipo            VARCHAR(10)      NOT NULL DEFAULT 'P',
       formato         VARCHAR(10)      NOT NULL DEFAULT 'S',
       bling_id        VARCHAR(50),
+      estoque         DECIMAL(10,2),
       created_at      TIMESTAMP        DEFAULT NOW(),
       updated_at      TIMESTAMP        DEFAULT NOW()
     );
@@ -55,10 +57,10 @@ export async function getProduct(id: number): Promise<BlingProduct | null> {
 export async function createProduct(data: Omit<BlingProduct, "id" | "created_at" | "updated_at">) {
   const { rows } = await sql<BlingProduct>`
     INSERT INTO bling_homologacao_produtos
-      (nome, codigo, preco, descricao_curta, situacao, tipo, formato, bling_id)
+      (nome, codigo, preco, descricao_curta, situacao, tipo, formato, bling_id, estoque)
     VALUES
       (${data.nome}, ${data.codigo}, ${data.preco}, ${data.descricao_curta},
-       ${data.situacao}, ${data.tipo}, ${data.formato}, ${data.bling_id})
+       ${data.situacao}, ${data.tipo}, ${data.formato}, ${data.bling_id}, ${data.estoque ?? null})
     RETURNING *;
   `
   return rows[0]
@@ -75,6 +77,7 @@ export async function updateProduct(id: number, updates: Partial<BlingProduct>) 
       tipo            = COALESCE(${updates.tipo}, tipo),
       formato         = COALESCE(${updates.formato}, formato),
       bling_id        = COALESCE(${updates.bling_id}, bling_id),
+      estoque         = COALESCE(${updates.estoque}, estoque),
       updated_at      = NOW()
     WHERE id = ${id}
     RETURNING *;
@@ -84,5 +87,5 @@ export async function updateProduct(id: number, updates: Partial<BlingProduct>) 
 
 export async function removeProduct(id: number) {
   const { rowCount } = await sql`DELETE FROM bling_homologacao_produtos WHERE id = ${id}`
-  return rowCount > 0
+  return (rowCount ?? 0) > 0
 }

@@ -1,6 +1,7 @@
 
 import { type NextRequest, NextResponse } from "next/server"
 import { createHmac } from "crypto"
+import { createProduct, updateProduct, removeProduct } from "@/lib/db"
 
 // Armazenamento simples em memória para logs de webhooks recebidos
 let webhookLogs: any[] = []
@@ -98,24 +99,60 @@ async function processWebhookEvent(data: any) {
   }
 }
 
+
+// Cria produto no banco ao receber webhook
 async function handleProdutoCriado(dados: any) {
-  console.log("Produto criado:", dados)
-  // Implementar lógica para sincronizar produto criado
+  try {
+    await createProduct({
+      nome: dados.nome ?? "Produto Webhook",
+      codigo: dados.codigo ?? "",
+      preco: dados.preco ?? 0,
+      descricao_curta: dados.descricao_curta ?? null,
+      situacao: dados.situacao ?? "Ativo",
+      tipo: dados.tipo ?? "P",
+      formato: dados.formato ?? "S",
+      bling_id: dados.bling_id ?? null,
+    })
+    console.log("Produto criado via webhook:", dados)
+  } catch (e) {
+    console.error("Erro ao criar produto via webhook:", e)
+  }
 }
 
+
+// Atualiza produto no banco ao receber webhook
 async function handleProdutoAlterado(dados: any) {
-  console.log("Produto alterado:", dados)
-  // Implementar lógica para sincronizar alterações do produto
+  try {
+    if (!dados.id) return
+    await updateProduct(Number(dados.id), dados)
+    console.log("Produto alterado via webhook:", dados)
+  } catch (e) {
+    console.error("Erro ao atualizar produto via webhook:", e)
+  }
 }
 
+
+// Remove produto do banco ao receber webhook
 async function handleProdutoExcluido(dados: any) {
-  console.log("Produto excluído:", dados)
-  // Implementar lógica para remover produto do sistema local
+  try {
+    if (!dados.id) return
+    await removeProduct(Number(dados.id))
+    console.log("Produto excluído via webhook:", dados)
+  } catch (e) {
+    console.error("Erro ao remover produto via webhook:", e)
+  }
 }
 
+
+// Atualiza estoque do produto (exemplo simplificado)
 async function handleEstoqueAlterado(dados: any) {
-  console.log("Estoque alterado:", dados)
-  // Implementar lógica para sincronizar alterações de estoque
+  try {
+    if (!dados.id || dados.estoque == null) return
+    await updateProduct(Number(dados.id), { estoque: dados.estoque })
+    console.log("Estoque alterado via webhook:", dados)
+  } catch (e) {
+    console.error("Erro ao atualizar estoque via webhook:", e)
+  }
 }
 
 async function handlePedidoCriado(dados: any) {

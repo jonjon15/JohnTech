@@ -1,0 +1,37 @@
+{
+  "info": {
+    "name": "API Produtos Bling - Homologação",
+    "description": "Collection para testes da API JohnTech",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Buscar Produto",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/produtos/{{produto_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["produtos", "{{produto_id}}"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://johntech.vercel.app/api/bling"
+    },
+    {
+      "key": "access_token",
+      "value": "seu_token_aqui"
+    }
+  ]
+}

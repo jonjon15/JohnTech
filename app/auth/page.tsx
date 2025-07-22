@@ -20,7 +20,7 @@ export default function AuthPage() {
 
       // Use crypto.randomUUID() para um state mais robusto e único
       const state = crypto.randomUUID()
-      // Use sempre https://johntech.vercel.app/auth/callback como callback.
+      // Use sempre https://johntech.vercel.app/auth/callback para produção.
       // Altere conforme necessário para deploy.
       const redirectUri = encodeURIComponent("https://johntech.vercel.app/auth/callback")
 

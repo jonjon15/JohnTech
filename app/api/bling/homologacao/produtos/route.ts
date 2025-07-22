@@ -1,6 +1,59 @@
-// Handler GET básico para evitar erro 405
+import { listProducts, createProduct, removeProduct } from "@/lib/db"
+import { z } from "zod"
+
+// GET: Lista todos os produtos de homologação
 export async function GET(req: NextRequest) {
-  return NextResponse.json({ message: "GET disponível!" })
+  try {
+    const produtos = await listProducts()
+    return NextResponse.json({ data: produtos, message: "Produtos listados com sucesso" })
+  } catch (error) {
+    return NextResponse.json({ error: "Erro ao listar produtos" }, { status: 500 })
+  }
+}
+
+// Esquema de validação zod para produto
+export const ProdutoSchema = z.object({
+  nome: z.string(),
+  codigo: z.string(),
+  preco: z.number(),
+  descricao_curta: z.string().nullable().optional(),
+  situacao: z.string().optional().default("Ativo"),
+  tipo: z.string().optional().default("P"),
+  formato: z.string().optional().default("S"),
+  bling_id: z.string().nullable().optional(),
+  estoque: z.number().optional().default(0),
+});
+
+// POST: Cria um novo produto de homologação
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const parsed = ProdutoSchema.parse(body);
+    // Garantir que descricao_curta e bling_id nunca sejam undefined
+    const produto = await createProduct({
+      ...parsed,
+      descricao_curta: parsed.descricao_curta ?? null,
+      bling_id: parsed.bling_id ?? null,
+    });
+    return NextResponse.json({ data: produto, message: "Produto criado com sucesso" }, { status: 201 });
+  } catch (err: any) {
+    const message = err instanceof z.ZodError ? err.errors : err.message;
+    return NextResponse.json({ error: "Erro ao criar produto", details: message }, { status: 400 });
+  }
+}
+
+// DELETE: Remove um produto de homologação (por id via query param)
+export async function DELETE(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const id = searchParams.get("id")
+  if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 })
+  try {
+    const ok = await removeProduct(Number(id))
+    if (!ok) return NextResponse.json({ error: "Produto não encontrado" }, { status: 404 })
+    return NextResponse.json({ success: true, message: "Produto removido com sucesso" })
+  } catch (error) {
+    return NextResponse.json({ error: "Erro ao remover produto" }, { status: 500 })
+  }
 }
 export const runtime = "nodejs"
 
@@ -19,45 +72,3 @@ function parseId(raw: string) {
   return id
 }
 
-/* ---------- PATCH /[id]/situacoes ---------- */
-export async function PATCH(req: NextRequest, { params }: Params) {
-  const t0 = Date.now()
-  const requestId = crypto.randomUUID()
-
-  try {
-    const id = parseId(params.id)
-    let situacao: string | undefined
-    try {
-      const body = await req.json()
-      situacao = body?.situacao
-    } catch (jsonErr) {
-      return NextResponse.json(handleBlingApiError("JSON inválido", "INVALID_JSON"), { status: 400 })
-    }
-    if (!situacao || !["aprovado", "rejeitado"].includes(situacao)) {
-      return NextResponse.json(handleBlingApiError("Situação inválida. Use 'aprovado' ou 'rejeitado'", "INVALID_STATUS"), { status: 400 })
-    }
-
-    const produto = await getProduct(id)
-    if (!produto) {
-      return NextResponse.json(handleBlingApiError("Produto não encontrado", "NOT_FOUND"), { status: 404 })
-    }
-
-    const updated = await updateProduct(id, { situacao })
-    if (!updated) {
-      return NextResponse.json(handleBlingApiError("Falha ao atualizar situação", "UPDATE_STATUS_FAIL"), { status: 500 })
-    }
-
-    const elapsed = Date.now() - t0
-    logBlingApiCall("PATCH", `/api/bling/homologacao/produtos/${id}/situacoes`, requestId, elapsed, true)
-
-    return NextResponse.json(
-      createBlingApiResponse({ data: { id, situacao }, message: "Situação atualizada" }, elapsed, requestId),
-    )
-  } catch (err: any) {
-    const elapsed = Date.now() - t0
-    logBlingApiCall("PATCH", `/api/bling/homologacao/produtos/${params.id}/situacoes`, requestId, elapsed, false)
-    return NextResponse.json(handleBlingApiError(err, "PATCH_STATUS"), {
-      status: err.message === "ID inválido" ? 400 : 500,
-    })
-  }
-}
