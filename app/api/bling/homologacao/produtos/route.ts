@@ -5,9 +5,15 @@ import { z } from "zod"
 export async function GET(req: NextRequest) {
   try {
     const produtos = await listProducts()
-    return NextResponse.json({ data: produtos, message: "Produtos listados com sucesso" })
+    const res = NextResponse.json({ data: produtos, message: "Produtos listados com sucesso" })
+    const homologacaoHeader = req.headers.get('x-bling-homologacao')
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
   } catch (error) {
-    return NextResponse.json({ error: "Erro ao listar produtos" }, { status: 500 })
+    const res = NextResponse.json({ error: "Erro ao listar produtos" }, { status: 500 })
+    const homologacaoHeader = req.headers.get('x-bling-homologacao')
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
   }
 }
 
@@ -35,10 +41,16 @@ export async function POST(req: NextRequest) {
       descricao_curta: parsed.descricao_curta ?? null,
       bling_id: parsed.bling_id ?? null,
     });
-    return NextResponse.json({ data: produto, message: "Produto criado com sucesso" }, { status: 201 });
+    const res = NextResponse.json({ data: produto, message: "Produto criado com sucesso" }, { status: 201 })
+    const homologacaoHeader = req.headers.get('x-bling-homologacao')
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
   } catch (err: any) {
     const message = err instanceof z.ZodError ? err.errors : err.message;
-    return NextResponse.json({ error: "Erro ao criar produto", details: message }, { status: 400 });
+    const res = NextResponse.json({ error: "Erro ao criar produto", details: message }, { status: 400 })
+    const homologacaoHeader = req.headers.get('x-bling-homologacao')
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
   }
 }
 
@@ -46,13 +58,26 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get("id")
-  if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 })
+  const homologacaoHeader = req.headers.get('x-bling-homologacao')
+  if (!id) {
+    const res = NextResponse.json({ error: "ID obrigatório" }, { status: 400 })
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
+  }
   try {
     const ok = await removeProduct(Number(id))
-    if (!ok) return NextResponse.json({ error: "Produto não encontrado" }, { status: 404 })
-    return NextResponse.json({ success: true, message: "Produto removido com sucesso" })
+    if (!ok) {
+      const res = NextResponse.json({ error: "Produto não encontrado" }, { status: 404 })
+      if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+      return res
+    }
+    const res = NextResponse.json({ success: true, message: "Produto removido com sucesso" })
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
   } catch (error) {
-    return NextResponse.json({ error: "Erro ao remover produto" }, { status: 500 })
+    const res = NextResponse.json({ error: "Erro ao remover produto" }, { status: 500 })
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
   }
 }
 export const runtime = "nodejs"

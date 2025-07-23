@@ -100,7 +100,8 @@ export async function GET(req: NextRequest, context: { params: { id: string } })
     logBlingApiCall("GET", `/api/bling/homologacao/produtos/${id}`, requestId, elapsed, true)
     
     // Formato de resposta compatível com padrão Bling
-    return NextResponse.json(
+    const homologacaoHeader = req.headers.get('x-bling-homologacao')
+    const res = NextResponse.json(
       createBlingApiResponse(
         { 
           data: produto,
@@ -115,6 +116,8 @@ export async function GET(req: NextRequest, context: { params: { id: string } })
         requestId
       )
     )
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
 
   } catch (err: any) {
     const elapsed = Date.now() - t0
@@ -173,7 +176,8 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
     const elapsed = Date.now() - t0
     logBlingApiCall("PUT", `/api/bling/homologacao/produtos/${id}`, requestId, elapsed, true)
     
-    return NextResponse.json(
+    const homologacaoHeader = req.headers.get('x-bling-homologacao')
+    const res = NextResponse.json(
       createBlingApiResponse(
         { 
           data: updated, 
@@ -189,6 +193,8 @@ export async function PUT(req: NextRequest, context: { params: { id: string } })
         requestId
       )
     )
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
 
   } catch (err: any) {
     const elapsed = Date.now() - t0
@@ -256,7 +262,8 @@ export async function DELETE(req: NextRequest, context: { params: { id: string }
     const elapsed = Date.now() - t0
     logBlingApiCall("DELETE", `/api/bling/homologacao/produtos/${id}`, requestId, elapsed, true)
     
-    return NextResponse.json(
+    const homologacaoHeader = req.headers.get('x-bling-homologacao')
+    const res = NextResponse.json(
       createBlingApiResponse(
         { 
           data: { 
@@ -274,6 +281,8 @@ export async function DELETE(req: NextRequest, context: { params: { id: string }
         requestId
       )
     )
+    if (homologacaoHeader) res.headers.set('x-bling-homologacao', homologacaoHeader)
+    return res
 
   } catch (err: any) {
     const elapsed = Date.now() - t0

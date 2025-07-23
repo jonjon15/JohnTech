@@ -1,14 +1,17 @@
+// Carrega variáveis do .env.local automaticamente
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 import { getValidAccessToken } from '../lib/bling-auth';
 
 async function refreshAccessToken(): Promise<string> {
   // Usa o mesmo e-mail do fluxo principal (ajuste se necessário)
-  const refreshed = await getValidAccessToken('admin@johntech.com.br', true);
+  const refreshed = await getValidAccessToken('admin@example.com', true);
   if (!refreshed) throw new Error('Não foi possível renovar o access token do Bling');
   return refreshed;
 }
 
 async function homologacaoFlow() {
-  let accessToken = await getValidAccessToken('admin@johntech.com.br'); // Ajuste o e-mail conforme seu ambiente
+  let accessToken = await getValidAccessToken('admin@example.com'); // Ajuste o e-mail conforme seu ambiente
   let homologacaoHash: string | undefined;
 
   async function blingRequest(url: string, options: RequestInit = {}) {
