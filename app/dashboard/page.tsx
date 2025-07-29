@@ -28,46 +28,46 @@ export default function DashboardPage() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle")
   const [hasLoaded, setHasLoaded] = useState(false) // Adicionar esta linha
 
-  // Mock data for demonstration
+  // Busca produtos reais da API
+  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    if (hasLoaded) return // Evita múltiplas chamadas
-
-    const mockProducts: Product[] = [
-      {
-        id: "1",
-        name: "Smartphone Galaxy S24",
-        sku: "SGS24-001",
-        stock: 45,
-        price: 2999.99,
-        status: "active",
-        lastSync: "2025-01-14T18:15:00Z",
-      },
-      {
-        id: "2",
-        name: "Notebook Dell Inspiron",
-        sku: "NDI-002",
-        stock: 12,
-        price: 3499.99,
-        status: "active",
-        lastSync: "2025-01-14T18:10:00Z",
-      },
-      {
-        id: "3",
-        name: "Mouse Wireless Logitech",
-        sku: "MWL-003",
-        stock: 3,
-        price: 149.99,
-        status: "low_stock",
-        lastSync: "2025-01-14T18:05:00Z",
-      },
-    ]
-
-    setTimeout(() => {
-      setProducts(mockProducts)
-      setLoading(false)
-      setHasLoaded(true) // Marcar como carregado
-    }, 1000)
-  }, [hasLoaded]) // Adicionar hasLoaded como dependência
+    if (hasLoaded) return;
+    setLoading(true);
+    setError(null);
+    fetch("/api/bling/produtos")
+      .then((res) => {
+        if (!res.ok) throw new Error("Erro ao buscar produtos");
+        return res.json();
+      })
+      .then((data) => {
+        // Ajuste conforme o formato retornado pela sua API
+        // Exemplo: data = { produtos: [{...}] }
+        setProducts(
+          (data.produtos || data) // fallback para array direto
+            .map((p: any) => ({
+              id: p.id?.toString() || p.bling_id?.toString() || p.codigo || Math.random().toString(),
+              name: p.nome || p.name || "Produto sem nome",
+              sku: p.sku || p.codigo || "-",
+              stock: p.estoque ?? p.stock ?? 0,
+              price: p.preco ?? p.price ?? 0,
+              status:
+                p.status ||
+                (p.estoque !== undefined && p.estoque <= 5
+                  ? "low_stock"
+                  : p.situacao === "I"
+                  ? "inactive"
+                  : "active"),
+              lastSync: p.updated_at || p.lastSync || new Date().toISOString(),
+            }))
+        );
+        setLoading(false);
+        setHasLoaded(true);
+      })
+      .catch((err) => {
+        setError(err.message || "Erro ao buscar produtos");
+        setLoading(false);
+      });
+  }, [hasLoaded]);
 
   const handleSync = async () => {
     if (syncStatus === "syncing") return // Evita múltiplas chamadas simultâneas
@@ -256,6 +256,10 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-center py-12">
                     <RefreshCw className="h-8 w-8 text-purple-400 animate-spin" />
                   </div>
+                ) : error ? (
+                  <div className="flex items-center justify-center py-12">
+                    <span className="text-red-400 font-semibold">{error}</span>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     {filteredProducts.map((product) => (
@@ -280,7 +284,7 @@ export default function DashboardPage() {
                                     : "bg-green-600/20 text-green-300 border-green-500/30"
                               }
                             >
-                              {product.status === "low_stock" ? "Low Stock" : "Active"}
+                              {product.status === "low_stock" ? "Low Stock" : product.status === "inactive" ? "Inactive" : "Active"}
                             </Badge>
                           </div>
                           <p className={`text-sm ${isWakanda ? "text-green-100/60" : "text-white/60"}`}>

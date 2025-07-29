@@ -126,7 +126,27 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json()
-    return NextResponse.json(data)
+    // Padroniza para sempre retornar { produtos: [...] }
+    let produtos: any[] = [];
+    if (Array.isArray(data)) {
+      produtos = data;
+    } else if (Array.isArray(data.produtos)) {
+      produtos = data.produtos;
+    } else if (data.data && Array.isArray(data.data)) {
+      produtos = data.data;
+    } else if (data.retorno && Array.isArray(data.retorno.produtos)) {
+      produtos = data.retorno.produtos;
+    }
+    else if (data && typeof data === 'object') {
+      // Tenta extrair array de produtos de outros formatos
+      for (const key of Object.keys(data)) {
+        if (Array.isArray(data[key])) {
+          produtos = data[key];
+          break;
+        }
+      }
+    }
+    return NextResponse.json({ produtos })
   } catch (error) {
     console.error("Erro interno:", error)
     return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
