@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { ProdutoSchema } from "../route"
+import { ProdutoSchema } from "@/app/api/bling/produtos/route"
 import crypto from "crypto"
 import { getProduct, updateProduct, removeProduct, type BlingProduct } from "@/lib/db"
 import { handleBlingApiError, createBlingApiResponse, logBlingApiCall } from "@/lib/bling-error-handler"
