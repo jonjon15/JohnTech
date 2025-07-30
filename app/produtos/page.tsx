@@ -15,7 +15,7 @@ export default function ProdutosPage() {
         <div className="text-white/50 text-xs mt-4">Usuário logado: {session?.user?.email}</div>
       </section>
       <footer className="w-full text-white/40 text-sm text-center pt-8 animate-fade-in delay-300">
-        Dúvidas? Consulte a <a href="/docs" className="underline hover:text-[#7F9FFF]">documentação</a> ou entre em contato com o suporte.<br />
+        Dúvidas? Consulte a <a href="/documentacao" className="underline hover:text-[#7F9FFF]">documentação</a> ou entre em contato com o suporte.<br />
         <span className="text-white/30">© {new Date().getFullYear()} JohnTech. Todos os direitos reservados.</span>
       </footer>
     </div>

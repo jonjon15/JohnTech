@@ -31,7 +31,7 @@ export default function DashboardPage() {
           </ol>
         </section>
       <footer className="w-full text-neutral-400 text-sm text-center pt-8 animate-fadein delay-400">
-        Dúvidas? Consulte a <a href="/docs" className="underline hover:text-blue-700">documentação</a> ou entre em contato com o suporte.<br />
+        Dúvidas? Consulte a <a href="/documentacao" className="underline hover:text-blue-700">documentação</a> ou entre em contato com o suporte.<br />
         <span className="text-neutral-300">© {new Date().getFullYear()} JohnTech. Todos os direitos reservados.</span>
       </footer>
     </div>
