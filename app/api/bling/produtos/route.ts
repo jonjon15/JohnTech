@@ -6,7 +6,7 @@ import { z } from "zod"
 const BLING_API_BASE = "https://www.bling.com.br/Api/v3"
 
 // Schema de validação baseado na documentação Bling
-const produtoSchema = z.object({
+export const ProdutoSchema = z.object({
   nome: z.string().min(1).max(120),
   codigo: z.string().optional(),
   preco: z.number().positive().optional(),
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Validar dados do produto
-    const validatedData = produtoSchema.parse(body)
+    const validatedData = ProdutoSchema.parse(body)
 
     const accessToken = await getValidAccessToken("admin@johntech.com")
     if (!accessToken) {
