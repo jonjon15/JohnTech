@@ -1,22 +1,17 @@
 import { NextResponse } from "next/server"
 import { getValidAccessToken } from "@/lib/bling-auth"
+import { handleBlingApiError } from "@/lib/bling-error-handler"
 
 export async function GET() {
   try {
     const userEmail = "admin@example.com"
-
-    // Verificar variáveis de ambiente
     const envCheck = {
       CLIENT_ID: !!process.env.CLIENT_ID,
       CLIENT_SECRET: !!process.env.CLIENT_SECRET,
       BLING_API_URL: !!process.env.BLING_API_URL,
     }
-
-    // Verificar token
     const token = await getValidAccessToken(userEmail)
     const hasValidToken = !!token
-
-    // Testar API se tiver token
     let apiStatus = "no_token"
     if (token) {
       try {
@@ -31,7 +26,6 @@ export async function GET() {
         apiStatus = "connection_error"
       }
     }
-
     return NextResponse.json({
       status: "ok",
       environment: envCheck,
@@ -42,13 +36,7 @@ export async function GET() {
       timestamp: new Date().toISOString(),
     })
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        status: "error",
-        message: error.message,
-        timestamp: new Date().toISOString(),
-      },
-      { status: 500 },
-    )
+    const err = handleBlingApiError(error, "bling_status")
+    return NextResponse.json(err, { status: 500 })
   }
 }

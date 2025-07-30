@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/db"
+import { encrypt } from "@/lib/utils"
 // import { getUserInfo } from "@/lib/userInfo" // Declare the getUserInfo variable
 // import { getUserInfo } from "@/lib/userInfo" // Use this if your tsconfig.json has a "paths" alias for "@"
 // import { getUserInfo } from "@/lib/userInfo" // Use this if your tsconfig.json has a "paths" alias for "@"
@@ -42,10 +43,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(callbackUrl)
   }
 
-  // Verifica o state (opcional, mas recomendado para segurança)
-  if (state) {
-    console.log("State recebido:", state)
+  // Validação do state (obrigatório para segurança)
+  const cookies = request.cookies
+  const stateCookie = cookies.get("bling_oauth_state")?.value
+  if (!state || !stateCookie || state !== stateCookie) {
+    console.error("State inválido ou ausente no callback OAuth2")
+    callbackUrl.searchParams.set("error", "invalid_state")
+    return NextResponse.redirect(callbackUrl)
   }
+  // Opcional: remover o cookie após uso
+  // Não é obrigatório, mas recomendado para evitar reuso
+  // Não implementado aqui pois NextResponse não tem API para remover cookie facilmente
 
   try {
     // Troca o código pelo token de acesso
@@ -148,6 +156,7 @@ async function saveTokensToDatabase(tokenData: any) {
     // Primeiro, tenta buscar informações do usuário usando o token
     const userInfo = await getUserInfo(tokenData.access_token)
 
+    const encryptedRefreshToken = encrypt(tokenData.refresh_token);
     if (userInfo.success) {
       // Salva ou atualiza o usuário no banco
       await sql`
@@ -164,7 +173,7 @@ async function saveTokensToDatabase(tokenData: any) {
           ${userInfo.data.email || "user@bling.com"}, 
           ${userInfo.data.name || "Usuário Bling"}, 
           ${tokenData.access_token}, 
-          ${tokenData.refresh_token}, 
+          ${encryptedRefreshToken}, 
           ${expiresAt.toISOString()},
           ${userInfo.data.id || null},
           NOW(),
@@ -179,7 +188,7 @@ async function saveTokensToDatabase(tokenData: any) {
           updated_at = NOW()
       `
 
-      console.log("Tokens salvos no banco com sucesso")
+      console.log("Tokens salvos no banco com sucesso (refresh_token criptografado)")
     } else {
       // Se não conseguir buscar info do usuário, salva apenas os tokens
       await sql`
@@ -195,7 +204,7 @@ async function saveTokensToDatabase(tokenData: any) {
           'user@bling.com', 
           'Usuário Bling', 
           ${tokenData.access_token}, 
-          ${tokenData.refresh_token}, 
+          ${encryptedRefreshToken}, 
           ${expiresAt.toISOString()},
           NOW(),
           NOW()

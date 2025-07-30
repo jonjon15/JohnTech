@@ -1,64 +1,67 @@
+# JohnTech – Plataforma de Integração Bling
 
-# 🛍️ JohnTech - Sistema de Gestão de Produtos
-
-API RESTful para cadastro, atualização, consulta e exclusão de produtos integrada ao Bling ERP.
-
-🔗 Acesse a aplicação: [https://johntech.vercel.app](https://johntech.vercel.app)
-
-## 🚀 Status da Homologação
-- ✅ Implementação completa
-- ✅ Testes automatizados
-- 🔄 Em processo de homologação Bling
-- ⏳ Aguardando aprovação
-
-## 📋 Funcionalidades
-- CRUD completo de produtos
-- Sincronização com estoque Bling
-- Validação fiscal (NCM, CEST)
-- Rate limiting (3req/s, 120k/dia)
-- Logs estruturados
-- OAuth 2.0
-
-## 🔧 Tecnologias
-- Next.js 14
-- TypeScript
-- Zod (validação)
-- Prisma (banco)
-
-## 📖 Documentação
-- [Guia de Homologação](https://johntech.vercel.app/docs/homologacao/README.md)
-- [Documentação Técnica dos Endpoints](https://johntech.vercel.app/docs/homologacao/endpoints.md)
-- [Exemplos de Uso](https://johntech.vercel.app/docs/homologacao/examples.md)
-- [Códigos de Erro](https://johntech.vercel.app/docs/homologacao/errors.md)
-- [Changelog](https://johntech.vercel.app/docs/homologacao/changelog.md)
-- [OpenAPI/Swagger](https://johntech.vercel.app/docs/api/openapi.yaml)
-- [Collection Postman](https://johntech.vercel.app/docs/api/postman-collection.json)
-
-## 🏃‍♂️ Instalação Rápida
-
-```bash
-# Clone o repositório
-git clone https://github.com/jonjon15/JohnTech.git
-
-# Instale dependências
-pnpm install
-
-# Configure variáveis ambiente
-cp .env.example .env.local
-
-# Execute testes
-pnpm test
-
-# Inicie desenvolvimento
-pnpm dev
-```
-
-## 📞 Suporte
-- Email: contato@johntech.com.br
-- Docs: https://johntech.vercel.app/docs
-- Issues: https://github.com/jonjon15/JohnTech/issues
+## Visão Geral
+JohnTech é uma solução SaaS moderna para integração, automação e gestão de estoques, pedidos e produtos com o Bling ERP. O projeto utiliza Next.js, TypeScript, PostgreSQL (Neon), autenticação OAuth2, webhooks seguros e arquitetura escalável.
 
 ---
-**Status**: Pronto para Homologação Bling  
-**Versão**: 1.0.0  
-**Última atualização**: 21/07/2025
+
+## Principais Funcionalidades
+- **Integração total com Bling**: produtos, pedidos, estoque, notas fiscais
+- **Webhooks seguros**: validação HMAC, idempotência, rastreabilidade
+- **Autenticação OAuth2**: login seguro e armazenamento criptografado de tokens
+- **Dashboard e relatórios**: visão centralizada de integrações e status
+- **Logs, auditoria e monitoramento**: Sentry, persistência de eventos, rate limit
+- **UI premium e responsiva**: experiência moderna e fluida
+
+---
+
+## Estrutura do Projeto
+- `/app` – Páginas, rotas e APIs Next.js
+- `/components` – Componentes de UI reutilizáveis
+- `/lib` – Helpers, utilitários, integrações externas
+- `/scripts` – SQL, utilitários de deploy e seed
+- `/docs` – Documentação técnica e exemplos
+- `/tests` – Testes automatizados (Vitest)
+
+---
+
+## Como rodar localmente
+1. Instale as dependências:
+   ```bash
+   pnpm install
+   ```
+2. Configure as variáveis de ambiente (`.env.local`):
+   - `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, `BLING_WEBHOOK_SECRET`, `ENCRYPTION_KEY`, `SENTRY_DSN`, etc.
+3. Execute o servidor:
+   ```bash
+   pnpm dev
+   ```
+4. Acesse: [https://localhost:3000](https://localhost:3000)
+
+---
+
+## Testes Automatizados
+- Execute os testes:
+  ```bash
+  pnpm exec vitest run --reporter=verbose
+  ```
+- Testes cobrem webhooks, autenticação, idempotência e fluxos críticos.
+
+---
+
+## Segurança
+- Tokens sensíveis criptografados no banco
+- Webhooks validados por HMAC
+- Rate limit em endpoints críticos
+- Monitoramento de erros com Sentry
+
+---
+
+## Documentação
+- [docs/bling-webhooks.md](docs/bling-webhooks.md): detalhes dos webhooks
+- Documentação de API e exemplos em `/docs`
+
+---
+
+## Suporte
+Dúvidas ou problemas? Consulte a documentação ou entre em contato com o time JohnTech.

@@ -20,8 +20,6 @@ export default function BlingIntegrationTest() {
   const [isRunning, setIsRunning] = useState(false)
   const [results, setResults] = useState<TestResult[]>([])
   const { toast } = useToast()
-  const { theme } = useTheme()
-  const isWakanda = theme === "wakanda"
 
   const runTests = async () => {
     setIsRunning(true)
@@ -127,15 +125,14 @@ export default function BlingIntegrationTest() {
   }
 
   return (
-    <Card
-      className={`backdrop-blur-sm mt-8 ${isWakanda ? "bg-green-950/20 border-green-500/20 wakanda-border" : "bg-white/5 border-white/10"}`}
+    <Card className="backdrop-blur-sm mt-8 bg-white/5 border-white/10">
     >
       <CardHeader>
-        <CardTitle className={`${isWakanda ? "text-green-100" : "text-white"} flex items-center gap-2`}>
+        <CardTitle className="text-white flex items-center gap-2">
           <RefreshCw className="h-5 w-5" />
           Teste de Integração
         </CardTitle>
-        <CardDescription className={`${isWakanda ? "text-green-100/70" : "text-white/70"}`}>
+        <CardDescription className="text-white/70">
           Verifique se todos os componentes estão funcionando corretamente
         </CardDescription>
       </CardHeader>
@@ -143,7 +140,7 @@ export default function BlingIntegrationTest() {
         <Button
           onClick={runTests}
           disabled={isRunning}
-          className={`w-full ${isWakanda ? "bg-green-600 hover:bg-green-700 text-black font-semibold wakanda-glow" : "bg-purple-600 hover:bg-purple-700"}`}
+          className="w-full bg-purple-600 hover:bg-purple-700"
         >
           {isRunning ? (
             <>
@@ -160,13 +157,13 @@ export default function BlingIntegrationTest() {
             {results.map((result, index) => (
               <div
                 key={index}
-                className={`flex items-center justify-between p-3 rounded-lg ${isWakanda ? "bg-green-950/30" : "bg-white/5"}`}
+                className="flex items-center justify-between p-3 rounded-lg bg-white/5"
               >
                 <div className="flex items-center gap-3">
                   {getStatusIcon(result.status)}
                   <div>
-                    <div className={`font-medium ${isWakanda ? "text-green-100" : "text-white"}`}>{result.name}</div>
-                    <div className={`text-sm ${isWakanda ? "text-green-100/70" : "text-white/70"}`}>
+                    <div className="font-medium text-white">{result.name}</div>
+                    <div className="text-sm text-white/70">
                       {result.message}
                     </div>
                   </div>
@@ -183,7 +180,7 @@ export default function BlingIntegrationTest() {
           <Alert
             className={`${
               results.every((r) => r.status === "success")
-                ? isWakanda
+                ? false
                   ? "bg-green-600/10 border-green-500/30"
                   : "bg-green-600/10 border-green-500/30"
                 : "bg-red-600/10 border-red-500/30"

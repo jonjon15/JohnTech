@@ -1,4 +1,5 @@
 import { sql } from "@vercel/postgres"
+import { decrypt } from "@/lib/utils"
 
 interface BlingToken {
   access_token: string
@@ -24,6 +25,15 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
     const now = new Date()
     const expiresAt = new Date(token.expires_at)
 
+    // Descriptografa o refresh_token
+    let refreshToken: string
+    try {
+      refreshToken = decrypt(token.refresh_token)
+    } catch (e) {
+      console.error("Erro ao descriptografar refresh_token:", e)
+      return null
+    }
+
     // Se o token ainda é válido e não é refresh forçado
     if (!forceRefresh && expiresAt > now) {
       return token.access_token
@@ -31,7 +41,7 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
 
     // Token expirado ou refresh forçado - tentar renovar
     console.log("Token expirado ou refresh forçado. Renovando...")
-    return await refreshAccessToken(userEmail, token.refresh_token)
+    return await refreshAccessToken(userEmail, refreshToken)
   } catch (error) {
     console.error("Erro ao obter token válido:", error)
     return null
@@ -40,17 +50,20 @@ export async function getValidAccessToken(userEmail: string, forceRefresh = fals
 
 async function refreshAccessToken(userEmail: string, refreshToken: string): Promise<string | null> {
   try {
+    const clientId = process.env.CLIENT_ID!
+    const clientSecret = process.env.CLIENT_SECRET!
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
+    // refreshToken já está descriptografado ao chegar aqui
     const response = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
+        Accept: "1.0",
+        Authorization: `Basic ${credentials}`,
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,
-        client_id: process.env.CLIENT_ID!,
-        client_secret: process.env.CLIENT_SECRET!,
       }),
     })
 
@@ -63,11 +76,13 @@ async function refreshAccessToken(userEmail: string, refreshToken: string): Prom
     const tokenData = await response.json()
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
 
-    // Atualizar token no banco
+    // Criptografa o novo refresh_token antes de salvar
+    const { encrypt } = await import("@/lib/utils")
+    const encryptedRefreshToken = encrypt(tokenData.refresh_token || refreshToken)
     await sql`
       UPDATE bling_tokens 
       SET access_token = ${tokenData.access_token},
-          refresh_token = ${tokenData.refresh_token || refreshToken},
+          refresh_token = ${encryptedRefreshToken},
           expires_at = ${expiresAt},
           updated_at = NOW()
       WHERE user_email = ${userEmail}

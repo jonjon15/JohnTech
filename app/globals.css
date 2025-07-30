@@ -1,6 +1,66 @@
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-in {
+  animation: fade-in 0.8s cubic-bezier(0.4,0,0.6,1);
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #09091a 100%);
+  min-height: 100vh;
+  transition: background 0.5s, color 0.5s;
+}
+
+/* Animações premium */
+.animate-pulse-slow {
+  animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.animate-pulse-slower {
+  animation: pulse 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+}
+
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 6s ease-in-out infinite;
+}
+@keyframes gradient-x {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Sombra premium para cards e containers */
+.shadow-2xl {
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.25), 0 1.5px 4px 0 rgba(127, 90, 240, 0.10);
+}
+
+/* Transições suaves para botões, links e inputs */
+a, button, input, select, textarea {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Scrollbar customizada */
+::-webkit-scrollbar {
+  width: 8px;
+  background: #181826;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #7F5AF0 0%, #232946 100%);
+  border-radius: 8px;
+}
 
 @layer base {
   :root {

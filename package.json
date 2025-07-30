@@ -38,11 +38,13 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@sentry/nextjs": "^9.43.0",
     "@vercel/postgres": "latest",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "latest",
+    "crypto-js": "^4.2.0",
     "date-fns": "4.1.0",
     "devcert": "^1.2.2",
     "dotenv": "^17.2.0",
@@ -51,7 +53,9 @@
     "input-otp": "latest",
     "lucide-react": "^0.454.0",
     "next": "15.2.4",
+    "next-auth": "^4.24.11",
     "next-themes": "latest",
+    "nodemailer": "^7.0.5",
     "react": "^19",
     "react-day-picker": "latest",
     "react-dom": "^19",
@@ -65,11 +69,18 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.4",
+    "@testing-library/react": "^16.3.0",
+    "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.16.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/supertest": "^6.0.3",
+    "@vitest/ui": "^3.2.4",
     "postcss": "^8.5",
+    "supertest": "^7.1.4",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

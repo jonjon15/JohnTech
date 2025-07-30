@@ -85,10 +85,10 @@ export default function AuthCallbackPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-white/5 border-white/10 backdrop-blur-sm">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">{getIcon()}</div>
-          <CardTitle className="text-white text-xl">{getTitle()}</CardTitle>
-          <CardDescription className="text-white/70">Integração com Bling API</CardDescription>
+        <CardHeader className="text-center p-0 border-none shadow-none bg-transparent">
+          <div className="flex justify-center mb-2">{getIcon()}</div>
+          <CardTitle className="text-white/70 text-base font-semibold">{getTitle()}</CardTitle>
+          <CardDescription className="text-white/40 text-xs mt-1">Integração com Bling API</CardDescription>
         </CardHeader>
         <CardContent className="text-center">
           <p className="text-white/80 mb-4">{message}</p>

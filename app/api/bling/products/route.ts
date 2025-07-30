@@ -21,6 +21,7 @@ const createErrorResponse = (message: string, status: number) => {
 }
 
 export async function GET(request: NextRequest) {
+  await rateLimit("bling_products")
   try {
     const { searchParams } = new URL(request.url)
     const page = searchParams.get("page") || "1"
@@ -94,6 +95,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  await rateLimit("bling_products")
   try {
     const productData = await request.json()
 

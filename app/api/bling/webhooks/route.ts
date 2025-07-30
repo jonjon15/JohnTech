@@ -2,12 +2,15 @@
 
 import { type NextRequest, NextResponse } from "next/server"
 import { createHmac, timingSafeEqual } from "crypto"
-import { createProduct, updateProduct, removeProduct } from "@/lib/db"
+import { createProduct, updateProduct, removeProduct, sql } from "@/lib/db"
+import * as Sentry from "@sentry/nextjs"
 
 // Armazenamento simples em memória para logs de webhooks recebidos
 let webhookLogs: any[] = []
 
 export async function POST(request: NextRequest) {
+  const { rateLimit } = await import("@/lib/bling-rate-limit")
+  await rateLimit("bling_webhooks")
   try {
     // Recebe o corpo como texto (obrigatório para validação HMAC)
     const body = await request.text();
@@ -35,8 +38,19 @@ export async function POST(request: NextRequest) {
     });
     webhookLogs = webhookLogs.slice(0, 50);
 
-    // Idempotência: pode-se usar eventId para evitar duplicidade (exemplo simplificado)
-    // Aqui apenas loga, mas pode-se implementar persistência se necessário
+    // Idempotência: persistir eventId para evitar duplicidade
+    if (webhookData.eventId) {
+      const exists = await sql`SELECT 1 FROM webhook_events WHERE event_data->>'eventId' = ${webhookData.eventId} LIMIT 1`;
+      if (exists.rows.length > 0) {
+        console.warn("Webhook duplicado ignorado (eventId já processado):", webhookData.eventId);
+        return NextResponse.json({ success: true, duplicate: true });
+      }
+      // Persiste o evento para rastreio e idempotência
+      await sql`
+        INSERT INTO webhook_events (user_id, event_type, event_data, processed, created_at)
+        VALUES (NULL, ${webhookData.event}, ${JSON.stringify(webhookData)}, TRUE, NOW())
+      `;
+    }
 
     // Processar evento conforme documentação Bling
     await processBlingWebhookEvent(webhookData);
@@ -45,6 +59,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Erro ao processar webhook:", error);
+    Sentry.captureException(error);
+    // Persistir erro para rastreabilidade
+    try {
+      await sql`
+        INSERT INTO webhook_events (user_id, event_type, event_data, processed, error_message, created_at)
+        VALUES (NULL, 'webhook_error', ${JSON.stringify({ error: String(error) })}, FALSE, ${String(error)}, NOW())
+      `;
+    } catch (persistErr) {
+      console.error("Falha ao registrar erro de webhook no banco:", persistErr);
+      Sentry.captureException(persistErr);
+    }
     // Sempre responder 2xx para evitar retentativas, mas logar o erro
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 200 });
   }

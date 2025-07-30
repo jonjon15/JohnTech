@@ -47,11 +47,11 @@ export default function AuthPage() {
         <Card
           className={`w-full max-w-md backdrop-blur-sm ${isWakanda ? "bg-green-950/20 border-green-500/20 wakanda-border" : "bg-white/5 border-white/10"}`}
         >
-          <CardHeader className="text-center">
-            <CardTitle className={`text-2xl ${isWakanda ? "text-green-100" : "text-white"}`}>
+          <CardHeader className="text-center p-0 border-none shadow-none bg-transparent">
+            <CardTitle className={`text-lg font-semibold ${isWakanda ? "text-green-100" : "text-white/80"}`}>
               Conectar ao Bling
             </CardTitle>
-            <CardDescription className={`${isWakanda ? "text-green-100/70" : "text-white/70"}`}>
+            <CardDescription className={`${isWakanda ? "text-green-100/60" : "text-white/50"} text-base mt-1`}>
               Conecte sua conta Bling ERP de forma segura para gerenciar seu estoque
             </CardDescription>
           </CardHeader>
