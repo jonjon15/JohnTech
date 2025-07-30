@@ -3,7 +3,6 @@ import { rateLimit } from "@/lib/bling-rate-limit"
 import { getValidAccessToken } from "@/lib/bling-auth"
 import { handleBlingApiError } from "@/lib/bling-error-handler"
 import { z } from "zod"
-      return NextResponse.json(handleBlingApiError("Token de acesso não disponível", "bling_produtos_get"), { status: 401 })
 const BLING_API_BASE = "https://www.bling.com.br/Api/v3"
 
 // Schema de validação baseado na documentação Bling
@@ -37,11 +36,9 @@ const produtoSchema = z.object({
     .object({
       minimo: z.number().nonnegative().optional(),
       maximo: z.number().nonnegative().optional(),
-          return NextResponse.json({ produtos: data })
       localizacao: z.string().max(10).optional(),
     })
     .optional(),
-      return NextResponse.json(handleBlingApiError("Token inválido ou expirado", "bling_produtos_get"), { status: 401 })
   tributacao: z
     .object({
       origem: z.enum(["0", "1", "2", "3", "4", "5", "6", "7", "8"]).optional(),
@@ -92,8 +89,8 @@ export async function GET(request: NextRequest) {
     const response = await fetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      return NextResponse.json(handleBlingApiError("Token de acesso não disponível", "bling_produtos_post"), { status: 401 })
+        Accept: "application/json"
+      }
     })
 
     if (response.status === 401) {
@@ -124,8 +121,8 @@ export async function GET(request: NextRequest) {
           error: "Erro ao buscar produtos",
           details: errorData,
         },
-        { status: response.status },
-      return NextResponse.json(handleBlingApiError("Token inválido ou expirado", "bling_produtos_post"), { status: 401 })
+        { status: response.status }
+      )
     }
 
     const data = await response.json()
