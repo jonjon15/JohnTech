@@ -11,8 +11,8 @@
 Configure no Vercel (Settings → Environment Variables):
 
 \`\`\`env
-CLIENT_ID=seu_client_id
-CLIENT_SECRET=seu_client_secret
+CLIENT_ID=44866dbd8fe131077d73dbe3d60531016512c855
+CLIENT_SECRET=18176f2b734f4abced1893fe39a852b6f28ff53c2a564348ebfe960367d1
 BLING_WEBHOOK_SECRET=09cd0c191a2d7d849609870b9166ab3b74e76ba95df54f0237bce24fb2af1e8b
 BLING_API_URL=https://www.bling.com.br/Api/v3
 DATABASE_URL=sua_url_do_postgres

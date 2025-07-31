@@ -16,7 +16,9 @@ export async function POST(request: NextRequest) {
       console.error("[Bling] Variáveis de ambiente do Bling não configuradas", {
         CLIENT_ID: process.env.CLIENT_ID,
         CLIENT_SECRET: process.env.CLIENT_SECRET,
-        REDIRECT_URI: process.env.REDIRECT_URI,
+        REDIRECT_URI: process.env.REDIRECT_URI || (process.env.NEXTAUTH_URL?.includes('localhost')
+          ? 'https://localhost:3000/api/auth/bling/callback'
+          : 'https://johntech.vercel.app/api/auth/bling/callback'),
       })
       return NextResponse.json({ error: "Configuração do Bling incompleta" }, { status: 500 })
     }
@@ -29,7 +31,9 @@ export async function POST(request: NextRequest) {
     console.log("[Bling] Enviando request para Bling OAuth/token", {
       grant_type: "authorization_code",
       code,
-      redirect_uri: process.env.REDIRECT_URI,
+      redirect_uri: process.env.REDIRECT_URI || (process.env.NEXTAUTH_URL?.includes('localhost')
+        ? 'https://localhost:3000/api/auth/bling/callback'
+        : 'https://johntech.vercel.app/api/auth/bling/callback'),
     })
     const tokenResponse = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
       method: "POST",
@@ -41,7 +45,9 @@ export async function POST(request: NextRequest) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code: code,
-        redirect_uri: process.env.REDIRECT_URI || "",
+        redirect_uri: process.env.REDIRECT_URI || (process.env.NEXTAUTH_URL?.includes('localhost')
+          ? 'https://localhost:3000/api/auth/bling/callback'
+          : 'https://johntech.vercel.app/api/auth/bling/callback'),
       }),
     })
 

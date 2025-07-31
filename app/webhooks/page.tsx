@@ -24,6 +24,7 @@ export default function WebhooksPage() {
 
   useEffect(() => {
     checkWebhookStatus()
+    // Removido qualquer polling automático. Só buscar status ao abrir a página ou após ações do usuário.
   }, [])
 
   const generateWebhookSecret = () => {

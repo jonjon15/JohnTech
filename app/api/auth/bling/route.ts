@@ -4,7 +4,14 @@ import { randomBytes } from "crypto"
 export async function GET(request: NextRequest) {
   try {
     const clientId = process.env.CLIENT_ID
-    const redirectUri = process.env.REDIRECT_URI
+    let redirectUri = process.env.REDIRECT_URI;
+    if (!redirectUri) {
+      if (process.env.NEXTAUTH_URL?.includes('localhost')) {
+        redirectUri = 'https://localhost:3000/api/auth/bling/callback';
+      } else {
+        redirectUri = 'https://johntech.vercel.app/api/auth/bling/callback';
+      }
+    }
 
     if (!clientId || !redirectUri) {
       return NextResponse.json(

@@ -8,7 +8,9 @@ import { getUserInfo } from "@/lib/userInfo"
 
 const CLIENT_ID = process.env.CLIENT_ID!
 const CLIENT_SECRET = process.env.CLIENT_SECRET!
-const REDIRECT_URI = process.env.REDIRECT_URI!
+const REDIRECT_URI = process.env.REDIRECT_URI || (process.env.NEXTAUTH_URL?.includes('localhost')
+  ? 'https://localhost:3000/api/auth/bling/callback'
+  : 'https://johntech.vercel.app/api/auth/bling/callback');
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams

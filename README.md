@@ -31,7 +31,7 @@ JohnTech é uma solução SaaS moderna para integração, automação e gestão 
    pnpm install
    ```
 2. Configure as variáveis de ambiente (`.env.local`):
-   - `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, `BLING_WEBHOOK_SECRET`, `ENCRYPTION_KEY`, `SENTRY_DSN`, etc.
+   - `CLIENT_ID` (44866dbd8fe131077d73dbe3d60531016512c855), `CLIENT_SECRET` (18176f2b734f4abced1893fe39a852b6f28ff53c2a564348ebfe960367d1), `REDIRECT_URI`, `BLING_WEBHOOK_SECRET`, `ENCRYPTION_KEY`, `SENTRY_DSN`, etc.
 3. Execute o servidor:
    ```bash
    pnpm dev

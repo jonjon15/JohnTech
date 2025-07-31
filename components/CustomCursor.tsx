@@ -39,9 +39,17 @@ const CustomCursor: React.FC = () => {
     const cursor = cursorRef.current;
     if (!cursor) return;
 
+    let hideTimeout: NodeJS.Timeout | null = null;
+    const INACTIVITY_MS = 1800;
+
     // Ajuste de deslocamento: +25px direita, +25px baixo
     const moveCursor = (e: MouseEvent) => {
       cursor.style.transform = `translate3d(${e.clientX - 14 + 25}px, ${e.clientY - 19 + 25}px, 0)`;
+      cursor.classList.remove('cursor-inactive');
+      if (hideTimeout) clearTimeout(hideTimeout);
+      hideTimeout = setTimeout(() => {
+        cursor.classList.add('cursor-inactive');
+      }, INACTIVITY_MS);
     };
 
     const addHover = () => cursor.classList.add('cursor-hover');
@@ -57,6 +65,9 @@ const CustomCursor: React.FC = () => {
     document.addEventListener('mousedown', addClick);
     document.addEventListener('mouseup', removeClick);
 
+    // Inicia invisível até o mouse mexer
+    cursor.classList.add('cursor-inactive');
+
     return () => {
       document.removeEventListener('mousemove', moveCursor);
       document.querySelectorAll('button, a, .primary-btn, .refresh-btn, .search-btn, .pagination-btn, .connect-bling-btn, .nav-link, .dashboard-card, .modal, .modal-content').forEach(el => {
@@ -65,6 +76,7 @@ const CustomCursor: React.FC = () => {
       });
       document.removeEventListener('mousedown', addClick);
       document.removeEventListener('mouseup', removeClick);
+      if (hideTimeout) clearTimeout(hideTimeout);
     };
   }, []);
 

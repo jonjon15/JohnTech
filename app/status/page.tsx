@@ -62,8 +62,8 @@ export default function StatusPage() {
 
   useEffect(() => {
     checkServices()
-    const interval = setInterval(checkServices, 30000) // Check every 30 seconds
-    return () => clearInterval(interval)
+    // Removido o polling automático para evitar requisições desnecessárias
+    // O usuário pode atualizar manualmente clicando no botão
   }, [])
 
   const getStatusIcon = (status: ServiceStatus["status"]) => {
@@ -100,7 +100,17 @@ export default function StatusPage() {
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className={`text-3xl font-bold ${isWakanda ? "text-green-100" : "text-white"}`}>Status do Sistema</h1>
+            <h1
+              className={`text-3xl font-bold pb-2 ${isWakanda ? "text-green-100" : "text-white"} inline-block w-auto border-b-4 ${isWakanda ? "border-green-400" : "border-purple-400"} rounded-b-lg shadow-[0_4px_16px_-8px_rgba(127,90,240,0.25)]`}
+              style={{
+                minWidth: 220,
+                marginBottom: 0,
+                borderBottomWidth: 4,
+                borderRadius: 0,
+              }}
+            >
+              Status do Sistema
+            </h1>
             <p className={`${isWakanda ? "text-green-100/70" : "text-white/70"} mt-2`}>
               Monitoramento em tempo real dos serviços JohnTech
             </p>

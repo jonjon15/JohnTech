@@ -150,6 +150,12 @@ a, button, input, select, textarea {
   background: none;
   will-change: transform;
   opacity: 1;
+  transition: opacity 0.3s;
+}
+
+.custom-cursor.cursor-inactive {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .custom-cursor .cursor-svg {
