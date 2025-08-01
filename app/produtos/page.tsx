@@ -1,7 +1,7 @@
 "use client";
 import { useSession } from "next-auth/react";
 import { FaPlus, FaMagnifyingGlass } from "react-icons/fa6";
-import { useState, ChangeEvent, FormEvent } from "react";
+import { useState, ChangeEvent, FormEvent, useEffect } from "react";
 import ProdutoModal from "@/components/ProdutoModal";
 import ProdutoCard from "@/components/ProdutoCard";
 import { useGooglePicker } from "@/hooks/useGooglePicker";
@@ -9,21 +9,45 @@ import { Produto } from "@/types/produto";
 
 export default function ProdutosPage() {
   const { data: session } = useSession();
-  const [produtos, setProdutos] = useState<Produto[]>([
-    { nome: "Camiseta JohnTech", sku: "JT-001", preco: 79.9, estoque: 12 },
-    { nome: "Caneca Premium", sku: "JT-002", preco: 39.9, estoque: 30 },
-    { nome: "Adesivo Logo", sku: "JT-003", preco: 9.9, estoque: 100 },
-  ]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  // Carrega produtos reais do backend ao montar
+  useEffect(() => {
+    fetch("/api/bling/produtos")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.produtos)) {
+          setProdutos(data.produtos);
+        }
+      })
+      .catch(() => {
+        // Em caso de erro, mantém vazio
+      });
+  }, []);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ nome: "", sku: "", preco: "", estoque: "", imagem: "" });
   const [erro, setErro] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
+  const [editIndex, setEditIndex] = useState<number | null>(null);
   const { openPicker } = useGooglePicker();
 
   const handleOpenModal = () => {
     setForm({ nome: "", sku: "", preco: "", estoque: "", imagem: "" });
     setPreview(null);
     setErro("");
+    setEditIndex(null);
+    setShowModal(true);
+  };
+  const handleEditProduto = (produto: Produto) => {
+    setForm({
+      nome: produto.nome,
+      sku: produto.sku,
+      preco: produto.preco.toString(),
+      estoque: produto.estoque.toString(),
+      imagem: produto.imagem || ""
+    });
+    setPreview(produto.imagem || null);
+    setErro("");
+    setEditIndex(produtos.findIndex(p => p.sku === produto.sku));
     setShowModal(true);
   };
   const handleCloseModal = () => setShowModal(false);
@@ -34,23 +58,60 @@ export default function ProdutosPage() {
   const handleGoogleDrivePicker = () => {
     openPicker((url) => setForm((prev) => ({ ...prev, imagem: url })));
   };
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!form.nome || !form.sku || !form.preco || !form.estoque) {
       setErro("Preencha todos os campos.");
       return;
     }
-    setProdutos([
-      ...produtos,
-      {
-        nome: form.nome,
-        sku: form.sku,
-        preco: parseFloat(form.preco),
-        estoque: parseInt(form.estoque),
-        imagem: form.imagem,
-      },
-    ]);
+    const novoProduto: Produto = {
+      nome: form.nome,
+      sku: form.sku,
+      preco: parseFloat(form.preco),
+      estoque: parseInt(form.estoque),
+      imagem: form.imagem,
+    };
+    if (editIndex !== null && editIndex >= 0) {
+      // Edição
+      try {
+        const res = await fetch("/api/bling/produtos", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(novoProduto),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          setErro(err.error || "Erro ao editar produto.");
+          return;
+        }
+        const atualizados = [...produtos];
+        atualizados[editIndex] = novoProduto;
+        setProdutos(atualizados);
+      } catch {
+        setErro("Erro de rede ao editar produto.");
+        return;
+      }
+    } else {
+      // Cadastro novo
+      try {
+        const res = await fetch("/api/bling/produtos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(novoProduto),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          setErro(err.error || "Erro ao cadastrar produto.");
+          return;
+        }
+        setProdutos([...produtos, novoProduto]);
+      } catch {
+        setErro("Erro de rede ao cadastrar produto.");
+        return;
+      }
+    }
     setShowModal(false);
+    setEditIndex(null);
   };
 
   return (
@@ -93,7 +154,7 @@ export default function ProdutosPage() {
       {/* Cards de produtos */}
       <section className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
         {produtos.map((p) => (
-          <ProdutoCard key={p.sku} produto={p} />
+          <ProdutoCard key={p.sku} produto={p} onEdit={handleEditProduto} />
         ))}
         {produtos.length === 0 && (
           <div className="col-span-full text-center text-white/60 py-8">Nenhum produto cadastrado.</div>

@@ -3,9 +3,10 @@ import { FaBoxOpen } from "react-icons/fa6";
 
 interface ProdutoCardProps {
   produto: Produto;
+  onEdit?: (produto: Produto) => void;
 }
 
-export default function ProdutoCard({ produto }: ProdutoCardProps) {
+export default function ProdutoCard({ produto, onEdit }: ProdutoCardProps) {
   return (
     <div className="bg-white/10 rounded-2xl shadow-xl p-6 flex flex-col items-center border border-white/10 backdrop-blur-md transition-all duration-300 hover:scale-105 hover:shadow-fuchsia-500/30">
       {produto.imagem ? (
@@ -17,6 +18,14 @@ export default function ProdutoCard({ produto }: ProdutoCardProps) {
       <span className="text-xs text-white/60 mb-2">SKU: {produto.sku}</span>
       <span className="text-fuchsia-300 font-bold text-xl mb-1">R$ {produto.preco.toFixed(2)}</span>
       <span className="text-emerald-400 text-sm">Estoque: {produto.estoque}</span>
+      {onEdit && (
+        <button
+          className="mt-3 px-4 py-1 rounded bg-fuchsia-700 text-white text-xs font-bold hover:bg-fuchsia-500 transition"
+          onClick={() => onEdit(produto)}
+        >
+          Editar
+        </button>
+      )}
     </div>
   );
 }
