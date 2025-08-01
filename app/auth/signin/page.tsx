@@ -1,9 +1,13 @@
 "use client"
 
 import { signIn } from "next-auth/react"
+// import duplicado removido
+import EmailAuthModal from "./EmailAuthModal"
+import { useState } from "react"
 
 
 export default function SignInPage() {
+  const [showEmailModal, setShowEmailModal] = useState(false)
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#09091a]">
       <main className="relative z-10 pt-28 pb-12 px-4 sm:px-8 max-w-7xl mx-auto w-full flex flex-col items-center justify-start min-h-screen transition-all duration-500">
@@ -26,15 +30,23 @@ export default function SignInPage() {
               Entrar com Google
             </span>
           </button>
+          <div className="my-6 flex items-center justify-center w-full">
+            <span className="h-px w-16 bg-gray-300" />
+            <span className="mx-2 text-gray-400 text-sm">ou</span>
+            <span className="h-px w-16 bg-gray-300" />
+          </div>
           <button
-            className="w-full py-3 mt-3 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-600 text-white font-extrabold text-lg shadow-lg hover:scale-105 hover:shadow-2xl hover:brightness-110 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-500/60 focus:ring-offset-2 active:scale-95 group"
-            onClick={() => window.location.href = '/api/auth/bling'}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-[#7F5AF0] to-[#7F9FFF] text-white font-extrabold text-lg shadow-lg hover:scale-105 hover:shadow-2xl hover:brightness-110 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#7F9FFF]/60 focus:ring-offset-2 active:scale-95 group"
+            onClick={() => setShowEmailModal(true)}
           >
             <span className="inline-flex items-center gap-2 justify-center">
-              <img src="https://www.bling.com.br/favicon.ico" alt="Bling" className="w-6 h-6" />
-              Entrar com Bling
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 7.5v9.75A2.25 2.25 0 0119.5 19.5H4.5a2.25 2.25 0 01-2.25-2.25V7.5m19.5 0A2.25 2.25 0 0019.5 5.25H4.5A2.25 2.25 0 002.25 7.5m19.5 0v.243a2.25 2.25 0 01-.977 1.874l-7.5 5.25a2.25 2.25 0 01-2.546 0l-7.5-5.25A2.25 2.25 0 012.25 7.743V7.5" />
+              </svg>
+              Entrar com e-mail
             </span>
           </button>
+          {showEmailModal && <EmailAuthModal onClose={() => setShowEmailModal(false)} />}
           <div className="mt-8 text-xs text-white/60 text-center select-none animate-fade-in delay-200">
             <span className="inline-flex items-center gap-1">
               <svg className="w-4 h-4 text-[#7F5AF0]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0-1.105.895-2 2-2s2 .895 2 2-.895 2-2 2-2-.895-2-2zm0 0V7m0 4v4m0 0c0 1.105-.895 2-2 2s-2-.895-2-2 .895-2 2-2 2 .895 2 2z"/></svg>

@@ -14,9 +14,9 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const processCallback = async () => {
-      const code = searchParams.get("code")
-      const state = searchParams.get("state")
-      const error = searchParams.get("error")
+      const code = searchParams?.get("code") ?? ""
+      const state = searchParams?.get("state") ?? ""
+      const error = searchParams?.get("error") ?? ""
 
       if (error) {
         setStatus("error")
@@ -42,11 +42,22 @@ export default function AuthCallbackPage() {
         const data = await response.json()
 
         if (response.ok) {
-          setStatus("success")
-          setMessage("Autorização concluída com sucesso!")
-          setTimeout(() => {
-            router.push("/dashboard")
-          }, 2000)
+          // Após sucesso, criar sessão NextAuth
+          const signInRes = await fetch("/api/auth/signin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: "admin@example.com", password: "bling-oauth" })
+          })
+          if (signInRes.ok) {
+            setStatus("success")
+            setMessage("Autorização concluída com sucesso!")
+            setTimeout(() => {
+              router.push("/dashboard")
+            }, 2000)
+          } else {
+            setStatus("error")
+            setMessage("Falha ao criar sessão. Tente novamente.")
+          }
         } else {
           setStatus("error")
           setMessage(data.error || "Erro ao obter token")

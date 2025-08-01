@@ -1,73 +1,3 @@
-export async function PUT(request: NextRequest) {
-  await rateLimit("bling_produtos")
-  try {
-    const body = await request.json();
-    const { sku } = body;
-    if (!sku) {
-      return NextResponse.json({ error: "SKU do produto é obrigatório para edição." }, { status: 400 });
-    }
-    // Validar dados do produto
-    const validatedData = ProdutoSchema.partial().parse(body);
-    const accessToken = await getValidAccessToken("admin@johntech.com");
-    if (!accessToken) {
-      return NextResponse.json({ error: "Token de acesso não disponível" }, { status: 401 });
-    }
-    // Envia para o endpoint de edição do Bling
-    const response = await fetch(`${BLING_API_BASE}/produtos/${sku}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(validatedData),
-    });
-    if (response.status === 401) {
-      const newToken = await getValidAccessToken("admin@johntech.com", true);
-      if (newToken) {
-        const retryResponse = await fetch(`${BLING_API_BASE}/produtos/${sku}`, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${newToken}`,
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(validatedData),
-        });
-        if (retryResponse.ok) {
-          const data = await retryResponse.json();
-          return NextResponse.json(data);
-        }
-      }
-      return NextResponse.json({ error: "Token inválido ou expirado" }, { status: 401 });
-    }
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("Erro ao editar produto:", response.status, errorData);
-      return NextResponse.json(
-        {
-          error: "Erro ao editar produto",
-          details: errorData,
-        },
-        { status: response.status },
-      );
-    }
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        {
-          error: "Dados inválidos",
-          details: error.errors,
-        },
-        { status: 400 },
-      );
-    }
-    console.error("Erro interno:", error);
-    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
-  }
-}
 import { type NextRequest, NextResponse } from "next/server"
 import { rateLimit } from "@/lib/bling-rate-limit"
 import { getValidAccessToken } from "@/lib/bling-auth"
@@ -140,7 +70,11 @@ export async function GET(request: NextRequest) {
     const nome = searchParams.get("nome")
     const idCategoria = searchParams.get("idCategoria")
 
-    const accessToken = await getValidAccessToken("admin@johntech.com")
+    const userEmail = request.headers.get("x-user-email") || "";
+    if (!userEmail) {
+      return NextResponse.json({ error: "E-mail do usuário não informado" }, { status: 401 });
+    }
+    const accessToken = await getValidAccessToken(userEmail)
     if (!accessToken) {
       return NextResponse.json({ error: "Token de acesso não disponível" }, { status: 401 })
     }
@@ -165,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     if (response.status === 401) {
       // Token expirado, tentar renovar
-      const newToken = await getValidAccessToken("admin@johntech.com", true)
+      const newToken = await getValidAccessToken(userEmail, true)
       if (newToken) {
         const retryResponse = await fetch(url.toString(), {
           headers: {
@@ -231,7 +165,11 @@ export async function POST(request: NextRequest) {
     // Validar dados do produto
     const validatedData = ProdutoSchema.parse(body)
 
-    const accessToken = await getValidAccessToken("admin@johntech.com")
+    const userEmail = request.headers.get("x-user-email") || "";
+    if (!userEmail) {
+      return NextResponse.json({ error: "E-mail do usuário não informado" }, { status: 401 });
+    }
+    const accessToken = await getValidAccessToken(userEmail)
     if (!accessToken) {
       return NextResponse.json({ error: "Token de acesso não disponível" }, { status: 401 })
     }
@@ -247,7 +185,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (response.status === 401) {
-      const newToken = await getValidAccessToken("admin@johntech.com", true)
+      const newToken = await getValidAccessToken(userEmail, true)
       if (newToken) {
         const retryResponse = await fetch(`${BLING_API_BASE}/produtos`, {
           method: "POST",
@@ -295,5 +233,80 @@ export async function POST(request: NextRequest) {
 
     console.error("Erro interno:", error)
     return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  await rateLimit("bling_produtos")
+  try {
+    const body = await request.json();
+    const { sku } = body;
+    if (!sku) {
+      return NextResponse.json({ error: "SKU do produto é obrigatório para edição." }, { status: 400 });
+    }
+    // Validar dados do produto
+    const validatedData = ProdutoSchema.partial().parse(body);
+    const userEmail = request.headers.get("x-user-email") || "";
+    if (!userEmail) {
+      return NextResponse.json({ error: "E-mail do usuário não informado" }, { status: 401 });
+    }
+    const accessToken = await getValidAccessToken(userEmail);
+    if (!accessToken) {
+      return NextResponse.json({ error: "Token de acesso não disponível" }, { status: 401 });
+    }
+    // Envia para o endpoint de edição do Bling
+    const response = await fetch(`${BLING_API_BASE}/produtos/${sku}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(validatedData),
+    });
+    if (response.status === 401) {
+      const newToken = await getValidAccessToken(userEmail, true);
+      if (newToken) {
+        const retryResponse = await fetch(`${BLING_API_BASE}/produtos/${sku}`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${newToken}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(validatedData),
+        });
+        if (retryResponse.ok) {
+          const data = await retryResponse.json();
+          return NextResponse.json(data);
+        }
+      }
+      return NextResponse.json({ error: "Token inválido ou expirado" }, { status: 401 });
+    }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("Erro ao editar produto:", response.status, errorData);
+      return NextResponse.json(
+        {
+          error: "Erro ao editar produto",
+          details: errorData,
+        },
+        { status: response.status },
+      );
+    }
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        {
+          error: "Dados inválidos",
+          details: error.errors,
+        },
+        { status: 400 },
+      );
+    }
+    console.error("Erro interno:", error);
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
   }
 }

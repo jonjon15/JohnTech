@@ -7,6 +7,7 @@ export async function GET() {
     const tokenCheck = await sql`
       SELECT 
         email,
+        active_plan,
         bling_access_token IS NOT NULL as has_access_token,
         bling_refresh_token IS NOT NULL as has_refresh_token,
         bling_token_expires_at,
